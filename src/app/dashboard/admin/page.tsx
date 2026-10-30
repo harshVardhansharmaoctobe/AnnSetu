@@ -1,0 +1,87 @@
+'use client';
+
+import Link from 'next/link';
+import { AlertTriangle, Package, Truck, UserCheck, Users } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ImpactPanel, type ImpactData } from '@/components/impact-panel';
+import { UserActions } from '@/components/user-actions';
+import { EmptyState, ErrorState, LoadingCards, PageHeader, StatCard, StatusBadge, humanize } from '@/components/states';
+import { useApi, type ListResult } from '@/lib/client';
+import { formatDateTime } from '@/lib/utils';
+
+interface AdminStats {
+  users: { total: number; pending: number; byRole: Record<string, number>; byStatus: Record<string, number> };
+  donationsByStatus: Record<string, number>;
+  requestsByStatus: Record<string, number>;
+  activeAssignments: number;
+  awaitingVolunteer: number;
+  impact: ImpactData;
+}
+interface PendingUser {
+  id: string; name: string; email: string; role: string; accountStatus: string; createdAt: string;
+  donorProfile: { organisationName: string } | null; ngoProfile: { organisationName: string } | null;
+}
+
+export default function AdminOverview() {
+  const stats = useApi<AdminStats>('/api/admin/stats');
+  const pending = useApi<ListResult<PendingUser>>('/api/admin/users?status=PENDING&pageSize=10');
+  const refresh = () => { stats.reload(); pending.reload(); };
+
+  if (stats.loading && !stats.data) return <LoadingCards count={4} />;
+  if (stats.error || !stats.data) return <ErrorState message={stats.error?.message ?? 'Could not load stats'} onRetry={stats.reload} />;
+  const s = stats.data;
+  const disputes = s.requestsByStatus.DISPUTED ?? 0;
+
+  return (
+    <div className="space-y-8">
+      <PageHeader title="Admin dashboard" description="Approve accounts, keep deliveries moving and monitor platform impact." />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatCard label="Pending approvals" value={s.users.pending} hint={`${s.users.total} accounts in total`} icon={UserCheck} tone="amber" />
+        <StatCard label="Awaiting a volunteer" value={s.awaitingVolunteer} hint="Approved requests" icon={Truck} tone="rose" />
+        <StatCard label="Deliveries in progress" value={s.activeAssignments} icon={Package} tone="blue" />
+        <StatCard label="Open disputes" value={disputes} icon={AlertTriangle} tone={disputes ? 'rose' : 'slate'} />
+      </div>
+
+      <Card>
+        <CardHeader className="flex-row items-center justify-between space-y-0">
+          <CardTitle className="text-lg">Accounts awaiting approval</CardTitle>
+          <Link href="/dashboard/admin/users?status=PENDING" className="text-sm text-green-700 hover:underline">All users</Link>
+        </CardHeader>
+        <CardContent>
+          {pending.loading && !pending.data ? <LoadingCards count={1} />
+            : pending.error ? <ErrorState message={pending.error.message} onRetry={pending.reload} />
+              : pending.data!.items.length === 0 ? <EmptyState icon={Users} title="No pending accounts" />
+                : (
+                  <ul className="divide-y">
+                    {pending.data!.items.map((u) => (
+                      <li key={u.id} className="flex flex-wrap items-center justify-between gap-3 py-3" data-testid="pending-user">
+                        <div>
+                          <p className="font-medium">{u.name} <span className="text-xs text-muted-foreground">· {humanize(u.role)}</span></p>
+                          <p className="text-xs text-muted-foreground">
+                            {u.email} · {u.donorProfile?.organisationName ?? u.ngoProfile?.organisationName ?? 'No organisation profile yet'} · {formatDateTime(u.createdAt)}
+                          </p>
+                        </div>
+                        <UserActions user={u} onChanged={refresh} />
+                      </li>
+                    ))}
+                  </ul>
+                )}
+        </CardContent>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        {[{ title: 'Donations by status', data: s.donationsByStatus }, { title: 'Requests by status', data: s.requestsByStatus }].map((block) => (
+          <Card key={block.title}>
+            <CardHeader><CardTitle className="text-base">{block.title}</CardTitle></CardHeader>
+            <CardContent className="flex flex-wrap gap-2">
+              {Object.keys(block.data).length === 0 ? <p className="text-sm text-muted-foreground">None yet</p>
+                : Object.entries(block.data).map(([k, v]) => <span key={k} className="flex items-center gap-1"><StatusBadge status={k} /><span className="text-sm font-semibold">{v}</span></span>)}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <ImpactPanel data={s.impact} />
+    </div>
+  );
+}

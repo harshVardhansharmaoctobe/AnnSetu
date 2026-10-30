@@ -1,0 +1,64 @@
+'use client';
+
+import Link from 'next/link';
+import { useState } from 'react';
+import { PlusCircle } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { EmptyState, ErrorState, LoadingCards, PageHeader, Pagination, StatusBadge } from '@/components/states';
+import { useApi, toQuery, type ListResult } from '@/lib/client';
+import { formatDateTime, formatTimeRemaining } from '@/lib/utils';
+
+interface DonationRow {
+  id: string; foodName: string; status: string; quantity: number; remainingQuantity: number; unit: string;
+  safePickupDeadline: string; createdAt: string; photoUrl: string | null; requestCounts: Record<string, number>;
+}
+
+const FILTERS = ['', 'AVAILABLE', 'PARTIALLY_RESERVED', 'FULLY_RESERVED', 'COMPLETED', 'EXPIRED', 'CANCELLED'];
+
+export default function MyDonationsPage() {
+  const [status, setStatus] = useState('');
+  const [page, setPage] = useState(1);
+  const { data, error, loading, reload } = useApi<ListResult<DonationRow>>(
+    `/api/donations${toQuery({ scope: 'mine', status, page, pageSize: 12 })}`
+  );
+
+  return (
+    <div>
+      <PageHeader
+        title="My donations"
+        actions={<Button asChild><Link href="/dashboard/donor/donations/new"><PlusCircle className="mr-2 h-4 w-4" /> New donation</Link></Button>}
+      />
+      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter by status">
+        {FILTERS.map((f) => (
+          <Button key={f || 'all'} size="sm" variant={status === f ? 'default' : 'outline'} onClick={() => { setStatus(f); setPage(1); }}>
+            {f ? f.toLowerCase().replace(/_/g, ' ') : 'All'}
+          </Button>
+        ))}
+      </div>
+      {loading && !data ? <LoadingCards />
+        : error ? <ErrorState message={error.message} onRetry={reload} />
+          : data!.items.length === 0 ? (
+            <EmptyState title="No donations here" action={{ label: 'Create donation', href: '/dashboard/donor/donations/new' }} />
+          ) : (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {data!.items.map((d) => (
+                <Link key={d.id} href={`/dashboard/donor/donations/${d.id}`} className="rounded-xl border bg-white p-5 transition hover:shadow-md">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold">{d.foodName}</p>
+                    <StatusBadge status={d.status} />
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {d.remainingQuantity} of {d.quantity} {d.unit.toLowerCase()} unreserved
+                  </p>
+                  <p className="text-sm text-muted-foreground">Pickup by {formatDateTime(d.safePickupDeadline)} ({formatTimeRemaining(d.safePickupDeadline)})</p>
+                  {d.requestCounts.PENDING > 0 && (
+                    <p className="mt-2 text-sm font-medium text-amber-700">{d.requestCounts.PENDING} request(s) awaiting you</p>
+                  )}
+                </Link>
+              ))}
+            </div>
+          )}
+      {data && <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={setPage} />}
+    </div>
+  );
+}
