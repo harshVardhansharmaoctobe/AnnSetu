@@ -172,7 +172,7 @@ export function DonationForm({
           </div>
           <div className="space-y-1.5">
             <Label>Photo</Label>
-            <ImageUpload value={photoUrl} onChange={setPhotoUrl} id="donation-photo" />
+            <ImageUpload value={photoUrl} onChange={setPhotoUrl} id="donation-photo" purpose="DONATION_PHOTO" />
           </div>
         </CardContent>
       </Card>

@@ -6,7 +6,9 @@ import { contactSelect } from '@/lib/selects';
 
 export const dynamic = 'force-dynamic';
 
-// GET /api/assignments/:id – the volunteer, the donor, the NGO of that delivery, and admins.
+// GET /api/assignments/:id
+// Full details for the assigned volunteer, the donor and NGO of the delivery, and admins.
+// Any approved volunteer may preview an OPEN (unassigned) delivery, without contact details.
 export const GET = route<{ id: string }>('assignments:get', async (_request, { id }) => {
   const auth = await requireUser({ roles: ['VOLUNTEER', 'DONOR', 'NGO', 'ADMIN'] });
   if (auth.error) return auth.error;
@@ -33,12 +35,29 @@ export const GET = route<{ id: string }>('assignments:get', async (_request, { i
   });
   if (!assignment) throw notFound('Assignment not found');
 
-  const allowed =
-    actor.role === 'ADMIN' ||
-    assignment.volunteerProfile.userId === actor.id ||
-    assignment.request.donation.donorProfile.userId === actor.id ||
-    assignment.request.ngoProfile.userId === actor.id;
-  if (!allowed) throw notFound('Assignment not found');
+  const isMine = assignment.volunteerProfile?.userId === actor.id;
+  const isParty = actor.role === 'ADMIN' || isMine
+    || assignment.request.donation.donorProfile.userId === actor.id
+    || assignment.request.ngoProfile.userId === actor.id;
+  const isOpenPreview = actor.role === 'VOLUNTEER' && assignment.status === 'PENDING' && !assignment.volunteerProfileId;
+  if (!isParty && !isOpenPreview) throw notFound('Assignment not found');
 
-  return NextResponse.json({ ...assignment, isMine: assignment.volunteerProfile.userId === actor.id });
+  if (!isParty) {
+    // Open delivery preview: locations and food details, but no contact information yet.
+    const { request: r, ...rest } = assignment;
+    const { donorProfile, contactPhone: _phone, ...donation } = r.donation;
+    const { user: _ngoUser, ...ngoProfile } = r.ngoProfile;
+    return NextResponse.json({
+      ...rest,
+      request: {
+        ...r,
+        proofs: [],
+        donation: { ...donation, contactPhone: null, donorProfile: { organisationName: donorProfile.organisationName, address: donorProfile.address } },
+        ngoProfile,
+      },
+      isMine: false,
+      isOpen: true,
+    });
+  }
+  return NextResponse.json({ ...assignment, isMine, isOpen: assignment.status === 'PENDING' && !assignment.volunteerProfileId });
 });

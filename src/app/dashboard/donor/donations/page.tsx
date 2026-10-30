@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EmptyState, ErrorState, LoadingCards, PageHeader, Pagination, StatusBadge } from '@/components/states';
-import { useApi, toQuery, type ListResult } from '@/lib/client';
+import { useApi, useQueryParam, toQuery, type ListResult } from '@/lib/client';
 import { formatDateTime, formatTimeRemaining } from '@/lib/utils';
 
 interface DonationRow {
@@ -15,8 +15,8 @@ interface DonationRow {
 
 const FILTERS = ['', 'AVAILABLE', 'PARTIALLY_RESERVED', 'FULLY_RESERVED', 'COMPLETED', 'EXPIRED', 'CANCELLED'];
 
-export default function MyDonationsPage() {
-  const [status, setStatus] = useState('');
+function MyDonations() {
+  const [status, setStatus] = useQueryParam('status');
   const [page, setPage] = useState(1);
   const { data, error, loading, reload } = useApi<ListResult<DonationRow>>(
     `/api/donations${toQuery({ scope: 'mine', status, page, pageSize: 12 })}`
@@ -25,7 +25,7 @@ export default function MyDonationsPage() {
   return (
     <div>
       <PageHeader
-        title="My donations"
+        title={status === 'COMPLETED' ? 'Donation history' : 'My donations'}
         actions={<Button asChild><Link href="/dashboard/donor/donations/new"><PlusCircle className="mr-2 h-4 w-4" /> New donation</Link></Button>}
       />
       <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter by status">
@@ -61,4 +61,8 @@ export default function MyDonationsPage() {
       {data && <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={setPage} />}
     </div>
   );
+}
+
+export default function Page() {
+  return <Suspense fallback={<LoadingCards />}><MyDonations /></Suspense>;
 }

@@ -35,7 +35,8 @@ npm run health                # → { status: 'ok', database: 'up' }
 | NGO | `ngo@foodbridge.local` – Annapurna Foundation (Demo), Malviya Nagar | `SEED_DEMO_PASSWORD` |
 | Volunteer | `volunteer@foodbridge.local` – C-Scheme, bike | `SEED_DEMO_PASSWORD` |
 
-Passwords are never stored in this repository – read them from your local `.env`. Donor, NGO and
+Passwords are never stored in this repository. `npm run db:seed` writes them, from your local `.env`, to
+**`DEMO_CREDENTIALS.local.md`** in the project folder (gitignored – open it before the demo). Donor, NGO and
 volunteer start as **PENDING** so the approval step can be shown (`SEED_DEMO_APPROVED=true` skips it).
 Re-running the seed never changes existing accounts; it only refreshes the deadlines of `[Demo]`
 donations no NGO has requested yet.
@@ -56,16 +57,17 @@ donations no NGO has requested yet.
 5. **NGO requests** – quantity 30, beneficiaries 60 → **Send request**. The request page shows *Pending*.
 6. **Donor approves** – donor dashboard → *Requests awaiting your decision* → **Approve**
    (10 meals stay available for other NGOs). The NGO gets a notification.
-7. **Admin assigns a volunteer** – admin → *Deliveries* (*Needs volunteer*) → **Assign** → choose
-   Priya Singh (sorted by distance to pickup) → **Assign**.
-   *(Alternative: the volunteer can claim it from the **Available** tab, which needs no acceptance step.)*
-8. **Volunteer accepts** – sign in as the volunteer → *Deliveries* → open the assignment → **Accept**.
-   Pickup and drop-off addresses, contacts and a map are shown.
-9. **Pickup** – **I have picked up the food** (pickup photo optional). Donor and NGO are notified.
-10. **Delivery proof** – upload a delivery photo (required – the button stays disabled without it),
-    quantity 30 → **Mark as delivered**.
-11. **NGO confirms receipt** – NGO → request page (or dashboard *Delivered – please confirm receipt*) →
-    **Confirm receipt** → impact recorded (≈ 30 meals). *Report problem* shows the dispute path instead.
+7. **Admin assigns a volunteer** – approving the request already opened a delivery for volunteers. Admin →
+   *Requests & deliveries* (*Awaiting volunteer*) → **Assign** → choose Priya Singh (sorted by distance) → **Assign**.
+   *(Alternative: the volunteer accepts it straight from **Available assignments** – first to accept wins.)*
+8. **Volunteer accepts** – sign in as the volunteer: the bell shows "New delivery assigned to you" and the
+   dashboard opens on **My assignments**. Open it → **Accept**. Pickup and drop-off appear on the map with a
+   dashed line and an OpenStreetMap directions link; contact details appear once accepted.
+9. **Pickup** – **I have arrived at pickup** (donor notified) → add a pickup photo → **I have collected the food**.
+10. **In transit and delivery proof** – **Mark in transit** (NGO notified) → upload the delivery photo (required –
+    the button stays disabled without it) → quantity → **Mark as delivered**.
+11. **NGO confirms receipt** – NGO → *Active deliveries* (or the request page) → **Confirm receipt** → optional
+    1–5 rating and feedback → confirm → impact recorded. *Report problem* shows the dispute path instead.
 12. **Admin views the completed delivery** – *Deliveries* → *Completed* → open it: full timeline, contacts,
     pickup and delivery proof photos.
 13. **Impact dashboard** – *Impact*: *Verified platform records* update from the confirmed delivery (food

@@ -1,5 +1,26 @@
 # FoodBridge – Testing Report
 
+## Latest results (final demo sprint)
+
+| Suite | Result |
+|---|---|
+| Unit (Vitest) | 33/33 |
+| Integration (Vitest + HTTP, `foodbridge_test`) | 123/123 – adds `workflow-v2.test.ts` (12): volunteer accept race, arrive → pickup → in transit → deliver, upload ownership/purpose, withdraw reopens a fresh assignment, failed delivery, mark unavailable, delete, password forgot/reset/change with session revocation, analytics |
+| E2E (Playwright, installed Chrome) | 4/4 – the demo flow now runs the exact 50 → 20 → 30 scenario and asserts the database rows (50 listed, 30 remaining, 20 delivered and confirmed, pickup + delivery proof, impact 20) |
+| tsc · ESLint · `next build` · Prisma validate · schema drift | all clean |
+| Smoke test, four seeded roles on the dev database | 20/20 |
+
+Bugs found and fixed in the sprint: same-second sessions survived a password reset; a race loser's
+response was ambiguous (later briefly over-exposed another volunteer's assignment – corrected, see the
+`acceptAssignment` comments).
+
+Known intermittent issue: two full integration runs (02:22 and once during the sprint) had a test file
+slow down for several minutes (`auth.test.ts` 420 s, `requests.test.ts` 242 s with one 60 s timeout).
+PostgreSQL logged no errors, the same code then passed 123/123 in 83 s, and it was not reproduced again.
+Root cause not identified; the machine's C: drive (which holds Docker's data) was nearly full at the time.
+
+Sections below describe the earlier baseline.
+
 All results below were produced by actually running the suites on 2026-10-31 (re-run after the final
 business-rule changes: verified-only impact, demo share, dispute resolution, maps) (Windows 11, Node 22.23.2,
 Next.js 15.5.28, PostgreSQL 16 + PostGIS in Docker). Nothing was skipped.

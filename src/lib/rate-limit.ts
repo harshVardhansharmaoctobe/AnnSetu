@@ -70,6 +70,7 @@ const globalLimiters = globalThis as unknown as {
     loginFailures: ReturnType<typeof createRateLimiter>;
     registration: ReturnType<typeof createRateLimiter>;
     uploads: ReturnType<typeof createRateLimiter>;
+    passwordReset: ReturnType<typeof createRateLimiter>;
   };
 };
 
@@ -81,4 +82,6 @@ export const limiters = (globalLimiters.foodbridgeLimiters ??= {
   registration: createRateLimiter({ limit: envInt('REGISTER_RATE_LIMIT', 10), windowMs: 60 * 60_000 }),
   // Uploads per user.
   uploads: createRateLimiter({ limit: envInt('UPLOAD_RATE_LIMIT', 60), windowMs: 60 * 60_000 }),
+  // Forgot-password requests per client IP and per email.
+  passwordReset: createRateLimiter({ limit: envInt('PASSWORD_RESET_RATE_LIMIT', 5), windowMs: 60 * 60_000 }),
 });

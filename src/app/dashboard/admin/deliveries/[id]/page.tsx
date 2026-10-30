@@ -20,7 +20,7 @@ interface Detail {
   disputeResolution: string | null; disputeResolvedAt: string | null;
   donation: { foodName: string; unit: string; pickupAddress: string; latitude: number; longitude: number; donorProfile: { organisationName: string; user: Contact } };
   ngoProfile: { organisationName: string; address: string; latitude: number; longitude: number; user: Contact };
-  assignments: { id: string; status: string; createdAt: string; notes: string | null; volunteerProfile: { user: Contact } }[];
+  assignments: { id: string; status: string; createdAt: string; notes: string | null; rejectionReason: string | null; volunteerProfile: { user: Contact } | null }[];
   proofs: Proof[];
   impact: { mealsRescued: number; weightKg: number | null; co2SavedKg: number | null } | null;
 }
@@ -87,7 +87,7 @@ export default function AdminDeliveryDetail() {
         <CardContent className="space-y-2 text-sm">
           {r.assignments.length === 0 ? <p className="text-muted-foreground">None yet.</p> : r.assignments.map((a) => (
             <div key={a.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
-              <div><p className="font-medium">{a.volunteerProfile.user.name}</p><p className="text-xs text-muted-foreground">{formatDateTime(a.createdAt)}{a.notes && ` · ${a.notes}`}</p></div>
+              <div><p className="font-medium">{a.volunteerProfile ? a.volunteerProfile.user.name : 'Open to volunteers'}</p><p className="text-xs text-muted-foreground">{formatDateTime(a.createdAt)}{(a.rejectionReason || a.notes) && ` · ${a.rejectionReason ?? a.notes}`}</p></div>
               <StatusBadge status={a.status} />
             </div>
           ))}

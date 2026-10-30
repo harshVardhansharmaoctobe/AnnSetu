@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { Clock, List, Map as MapIcon, MapPin, Search, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { NativeSelect } from '@/components/ui/native-select';
 import { MapView, type MapMarker } from '@/components/map-view';
 import { EmptyState, ErrorState, LoadingCards, PageHeader, Pagination, StatusBadge, humanize } from '@/components/states';
-import { useApi, toQuery } from '@/lib/client';
+import { useApi, useQueryParam, toQuery } from '@/lib/client';
 import { FOOD_CATEGORIES, FOOD_TYPES } from '@/lib/constants';
 import { formatTimeRemaining } from '@/lib/utils';
 
@@ -25,7 +25,11 @@ interface DiscoveryResult {
   origin: { lat: number; lng: number; source: string } | null; truncated: boolean;
 }
 
-export default function BrowsePage() {
+export default function Page() {
+  return <Suspense fallback={<LoadingCards />}><BrowsePage /></Suspense>;
+}
+
+function BrowsePage() {
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [category, setCategory] = useState('');
@@ -34,7 +38,10 @@ export default function BrowsePage() {
   const [sort, setSort] = useState('nearest');
   const [radius, setRadius] = useState('');
   const [page, setPage] = useState(1);
-  const [view, setView] = useState<'list' | 'map'>('list');
+  const [viewParam, setViewParam] = useQueryParam('view', 'list');
+  const view = viewParam === 'map' ? 'map' : 'list';
+  const setView = (v: 'list' | 'map') => setViewParam(v);
+  const [minQuantity, setMinQuantity] = useState('');
 
   useEffect(() => {
     const t = setTimeout(() => { setDebouncedQ(q); setPage(1); }, 350);
@@ -42,7 +49,7 @@ export default function BrowsePage() {
   }, [q]);
 
   const url = `/api/donations${toQuery({
-    scope: 'available', q: debouncedQ, category, foodType, expiresWithinHours: expires, sort, radiusKm: radius, page, pageSize: 12,
+    scope: 'available', q: debouncedQ, category, foodType, expiresWithinHours: expires, sort, radiusKm: radius, minQuantity, page, pageSize: 12,
   })}`;
   const { data, error, loading, reload } = useApi<DiscoveryResult>(url);
 
@@ -106,6 +113,12 @@ export default function BrowsePage() {
             <option value="25">≤ 25 km</option>
           </NativeSelect>
         </div>
+        <NativeSelect aria-label="Minimum quantity available" value={minQuantity} onChange={setFilter(setMinQuantity)}>
+          <option value="">Any quantity</option>
+          <option value="10">At least 10</option>
+          <option value="25">At least 25</option>
+          <option value="50">At least 50</option>
+        </NativeSelect>
       </div>
 
       {view === 'map' && (

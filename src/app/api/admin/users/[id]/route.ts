@@ -6,6 +6,7 @@ import { clientIp, conflict, forbidden, notFound, parseBody, route } from '@/lib
 import { accountActionSchema } from '@/lib/validations';
 import { audit, notify } from '@/lib/events';
 import { adminUserSelect } from '@/lib/selects';
+import { releaseAssignment } from '@/lib/workflow';
 
 const TRANSITIONS: Record<
   'approve' | 'reject' | 'suspend' | 'reinstate',
@@ -52,22 +53,13 @@ export const POST = route<{ id: string }>('admin:user-action', async (request, {
       throw conflict(`Cannot ${action} an account that is ${target.accountStatus.toLowerCase()}`, 'INVALID_TRANSITION');
     }
 
-    // A suspended volunteer's deliveries that are not yet picked up go back to the pool.
+    // A suspended volunteer's deliveries that are not yet picked up reopen for other volunteers.
     if (t.to === 'SUSPENDED' && target.role === 'VOLUNTEER') {
       const active = await tx.volunteerAssignment.findMany({
-        where: { volunteerProfile: { userId: id }, status: { in: ['ASSIGNED', 'ACCEPTED'] } },
-        select: { id: true, requestId: true },
+        where: { volunteerProfile: { userId: id }, status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKUP_IN_PROGRESS'] } },
+        select: { id: true, requestId: true, status: true },
       });
-      if (active.length > 0) {
-        await tx.volunteerAssignment.updateMany({
-          where: { id: { in: active.map((a) => a.id) } },
-          data: { status: 'CANCELLED', notes: 'Volunteer account suspended' },
-        });
-        await tx.foodRequest.updateMany({
-          where: { id: { in: active.map((a) => a.requestId) }, status: 'VOLUNTEER_ASSIGNED' },
-          data: { status: 'ACCEPTED' },
-        });
-      }
+      for (const a of active) await releaseAssignment(tx, a, 'CANCELLED', 'Volunteer account suspended');
     }
 
     await notify(tx, {
@@ -89,4 +81,39 @@ export const POST = route<{ id: string }>('admin:user-action', async (request, {
   });
 
   return NextResponse.json(updated);
+});
+
+// GET /api/admin/users/:id – profile details, activity counts and the account's audit history.
+export const GET = route<{ id: string }>('admin:user-detail', async (_request, { id }) => {
+  const auth = await requireUser({ roles: ['ADMIN'] });
+  if (auth.error) return auth.error;
+  const user = await prisma.user.findUnique({
+    where: { id },
+    select: {
+      ...adminUserSelect,
+      avatarUrl: true,
+      isDemo: true,
+      donorProfile: true,
+      ngoProfile: true,
+      volunteerProfile: true,
+    },
+  });
+  if (!user) throw notFound('User not found');
+  const [donations, requests, assignments, history] = await Promise.all([
+    user.donorProfile ? prisma.foodDonation.groupBy({ by: ['status'], where: { donorProfileId: user.donorProfile.id }, _count: true }) : [],
+    user.ngoProfile ? prisma.foodRequest.groupBy({ by: ['status'], where: { ngoProfileId: user.ngoProfile.id }, _count: true }) : [],
+    user.volunteerProfile ? prisma.volunteerAssignment.groupBy({ by: ['status'], where: { volunteerProfileId: user.volunteerProfile.id }, _count: true }) : [],
+    prisma.auditLog.findMany({
+      where: { OR: [{ entity: 'User', entityId: id }, { userId: id }] },
+      orderBy: { createdAt: 'desc' },
+      take: 20,
+      include: { user: { select: { name: true, role: true } } },
+    }),
+  ]);
+  const counts = (rows: { status: string; _count: number }[]) => Object.fromEntries(rows.map((r) => [r.status, r._count]));
+  return NextResponse.json({
+    ...user,
+    activity: { donations: counts(donations), requests: counts(requests), assignments: counts(assignments) },
+    history,
+  });
 });

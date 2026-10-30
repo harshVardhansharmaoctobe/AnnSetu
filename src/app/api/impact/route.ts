@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { requireUser } from '@/lib/api-auth';
 import { route } from '@/lib/api';
-import { getImpactStats, type ImpactScope } from '@/lib/stats';
+import { getImpactStats, getTrends, normaliseRange, type ImpactScope } from '@/lib/stats';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +10,14 @@ export const dynamic = 'force-dynamic';
 // GET /api/impact?scope=me   – the signed-in donor/NGO/volunteer's own contribution
 export const GET = route('impact', async (request) => {
   if (request.nextUrl.searchParams.get('scope') !== 'me') {
-    return NextResponse.json(await getImpactStats({ kind: 'platform' }), {
+    // Optional platform trends (aggregates only): ?trend=day|week|month
+    const trend = request.nextUrl.searchParams.get('trend');
+    const interval = trend === 'day' || trend === 'week' || trend === 'month' ? trend : null;
+    const [stats, trends] = await Promise.all([
+      getImpactStats({ kind: 'platform' }),
+      interval ? getTrends(normaliseRange({ interval })) : Promise.resolve(undefined),
+    ]);
+    return NextResponse.json({ ...stats, ...(trends && { trends }) }, {
       headers: { 'Cache-Control': 'public, max-age=15' },
     });
   }

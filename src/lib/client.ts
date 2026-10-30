@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 
 /** Error thrown by `api()` with the server's safe message and optional code/field details. */
 export class ApiClientError extends Error {
@@ -40,9 +41,12 @@ export async function api<T = unknown>(url: string, options: { method?: string; 
   return data as T;
 }
 
-export async function uploadImage(file: File): Promise<string> {
+export type UploadPurpose = 'DONATION_PHOTO' | 'PICKUP_PROOF' | 'DELIVERY_PROOF' | 'AVATAR';
+
+export async function uploadImage(file: File, purpose: UploadPurpose): Promise<string> {
   const form = new FormData();
   form.append('file', file);
+  form.append('purpose', purpose);
   let response: Response;
   try {
     response = await fetch('/api/uploads', { method: 'POST', body: form });
@@ -99,4 +103,26 @@ export function toQuery(params: Record<string, string | number | undefined | nul
   }
   const s = search.toString();
   return s ? `?${s}` : '';
+}
+
+/**
+ * A string filter stored in the URL query (?key=value), so dashboard links and the back button work.
+ * Pages using it must be rendered inside <Suspense> (useSearchParams).
+ */
+export function useQueryParam(key: string, fallback = ''): [string, (value: string) => void] {
+  const params = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const value = params.get(key) ?? fallback;
+  const set = useCallback(
+    (next: string) => {
+      const query = new URLSearchParams(params.toString());
+      if (next && next !== fallback) query.set(key, next);
+      else query.delete(key);
+      const qs = query.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [params, router, pathname, key, fallback]
+  );
+  return [value, set];
 }

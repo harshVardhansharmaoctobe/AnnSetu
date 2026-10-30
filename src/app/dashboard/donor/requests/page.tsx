@@ -1,25 +1,31 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { DonorRequestCard, type DonorRequest } from '@/components/donor-request-card';
-import { EmptyState, ErrorState, LoadingCards, PageHeader, Pagination } from '@/components/states';
-import { useApi, toQuery, type ListResult } from '@/lib/client';
+import { EmptyState, ErrorState, LoadingCards, PageHeader, Pagination, humanize } from '@/components/states';
+import { useApi, useQueryParam, toQuery, type ListResult } from '@/lib/client';
 
-const FILTERS = ['PENDING', '', 'ACCEPTED', 'VOLUNTEER_ASSIGNED', 'PICKED_UP', 'DELIVERED', 'COMPLETED', 'REJECTED'];
+const FILTERS = ['PENDING', 'ACCEPTED', 'VOLUNTEER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED', 'REJECTED', 'CANCELLED', 'ALL'];
+const TITLES: Record<string, string> = { PENDING: 'Incoming requests', ACCEPTED: 'Approved requests' };
 
-export default function DonorRequestsPage() {
-  const [status, setStatus] = useState('PENDING');
+function DonorRequests() {
+  const [status, setStatus] = useQueryParam('status', 'PENDING');
   const [page, setPage] = useState(1);
-  const { data, error, loading, reload } = useApi<ListResult<DonorRequest>>(`/api/requests${toQuery({ status, page })}`);
+  const { data, error, loading, reload } = useApi<ListResult<DonorRequest>>(
+    `/api/requests${toQuery({ status: status === 'ALL' ? undefined : status, page })}`
+  );
 
   return (
     <div>
-      <PageHeader title="NGO requests" description="Approve requests to reserve food; declined requests free nothing." />
+      <PageHeader
+        title={TITLES[status] ?? 'NGO requests'}
+        description="Approving a request reserves that quantity for the NGO and opens a delivery for volunteers."
+      />
       <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter by status">
         {FILTERS.map((f) => (
-          <Button key={f || 'all'} size="sm" variant={status === f ? 'default' : 'outline'} onClick={() => { setStatus(f); setPage(1); }}>
-            {f ? f.toLowerCase().replace(/_/g, ' ') : 'All'}
+          <Button key={f} size="sm" variant={status === f ? 'default' : 'outline'} onClick={() => { setStatus(f); setPage(1); }}>
+            {f === 'ALL' ? 'All' : f === 'ACCEPTED' ? 'Approved' : humanize(f)}
           </Button>
         ))}
       </div>
@@ -30,4 +36,8 @@ export default function DonorRequestsPage() {
       {data && <Pagination page={data.page} pageSize={data.pageSize} total={data.total} onPage={setPage} />}
     </div>
   );
+}
+
+export default function Page() {
+  return <Suspense fallback={<LoadingCards count={2} />}><DonorRequests /></Suspense>;
 }

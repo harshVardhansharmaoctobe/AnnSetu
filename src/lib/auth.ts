@@ -80,11 +80,16 @@ export const authOptions: NextAuthOptions = {
       // status changes made by an admin take effect immediately instead of after 24h.
       const current = await prisma.user.findUnique({
         where: { id: token.id },
-        select: { role: true, accountStatus: true },
+        select: { role: true, accountStatus: true, passwordChangedAt: true },
       });
       if (!current || current.accountStatus === 'SUSPENDED') {
         // Throwing makes NextAuth discard the session: getServerSession() returns null.
         throw new Error('Session revoked: account deleted or suspended');
+      }
+      // A password change/reset revokes every session issued before it (iat is in seconds).
+      const issuedAt = (token as { iat?: number }).iat;
+      if (current.passwordChangedAt && issuedAt && issuedAt < Math.floor(current.passwordChangedAt.getTime() / 1000)) {
+        throw new Error('Session revoked: password changed');
       }
       token.role = current.role;
       token.accountStatus = current.accountStatus;

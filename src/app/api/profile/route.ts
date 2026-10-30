@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import prisma from '@/lib/db';
 import { requireUser } from '@/lib/api-auth';
 import { profileUpdateSchema } from '@/lib/validations';
+import { assertOwnUpload } from '@/lib/workflow';
+import { toErrorResponse } from '@/lib/api';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,7 +64,13 @@ export async function PUT(request: NextRequest) {
       { status: 400 }
     );
   }
-  const { name, phone, donorProfile, ngoProfile, volunteerProfile } = parsed.data;
+  const { name, phone, avatarUrl, donorProfile, ngoProfile, volunteerProfile } = parsed.data;
+  // Only an image this user uploaded as a profile photo may be used.
+  try {
+    await assertOwnUpload(prisma, avatarUrl, userId, 'AVATAR');
+  } catch (error) {
+    return toErrorResponse(error, 'profile:avatar');
+  }
 
   // Users may only write the profile type that matches their own role.
   const allowedKey = PROFILE_KEY_BY_ROLE[role];
@@ -77,8 +85,8 @@ export async function PUT(request: NextRequest) {
   try {
     // userId always comes from the session, never from the request body.
     await prisma.$transaction(async (tx) => {
-      if (name !== undefined || phone !== undefined) {
-        await tx.user.update({ where: { id: userId }, data: { name, phone } });
+      if (name !== undefined || phone !== undefined || avatarUrl !== undefined) {
+        await tx.user.update({ where: { id: userId }, data: { name, phone, avatarUrl } });
       }
       if (donorProfile) {
         await tx.donorProfile.upsert({

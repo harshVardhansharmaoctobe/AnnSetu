@@ -6,6 +6,7 @@ import { AlertTriangle, ArrowLeft, CheckCircle2, Phone, XCircle } from 'lucide-r
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/confirm-dialog';
+import { ConfirmReceiptDialog } from '@/components/confirm-receipt-dialog';
 import { ProofList, RequestProgress, type Proof } from '@/components/request-progress';
 import { ErrorState, LoadingCards, PageHeader, StatusBadge, humanize } from '@/components/states';
 import { useToast } from '@/components/toaster';
@@ -16,12 +17,13 @@ interface Contact { name: string; email: string; phone: string | null }
 interface RequestDetail {
   id: string; status: string; requestedQuantity: number; deliveredQuantity: number | null; beneficiaryCount: number | null;
   notes: string | null; createdAt: string; approvedAt: string | null; pickedUpAt: string | null; deliveredAt: string | null;
-  completedAt: string | null; rejectionReason: string | null; disputeReason: string | null;
+  completedAt: string | null; rejectionReason: string | null; disputeReason: string | null; inTransitAt: string | null;
+  feedbackRating: number | null; feedbackComment: string | null;
   donation: {
     id: string; foodName: string; unit: string; pickupAddress: string; safePickupDeadline: string; contactPhone: string | null;
     donorProfile: { organisationName: string; user: Contact };
   };
-  assignments: { id: string; status: string; volunteerProfile: { vehicleType: string | null; user: Contact } }[];
+  assignments: { id: string; status: string; volunteerProfile: { vehicleType: string | null; user: Contact } | null }[];
   proofs: Proof[];
   impact: { mealsRescued: number; weightKg: number | null } | null;
 }
@@ -37,7 +39,7 @@ export default function NgoRequestDetail() {
   if (error || !data) return <ErrorState message={error?.message ?? 'Request not found'} onRetry={reload} />;
   const r = data;
   const unit = r.donation.unit.toLowerCase();
-  const volunteer = r.assignments.find((a) => !['DECLINED', 'CANCELLED'].includes(a.status));
+  const volunteer = r.assignments.find((a) => a.volunteerProfile && !['REJECTED', 'CANCELLED'].includes(a.status));
   const approved = !['PENDING', 'REJECTED', 'CANCELLED'].includes(r.status);
 
   const act = (path: string, body: unknown, success: string) => async () => {
@@ -81,6 +83,8 @@ export default function NgoRequestDetail() {
       {r.impact && (
         <p className="rounded-lg bg-green-50 p-4 text-sm text-green-900">
           Impact recorded: ≈ {r.impact.mealsRescued} meals{r.impact.weightKg ? ` (≈ ${r.impact.weightKg} kg of food)` : ''} rescued.
+          {r.feedbackRating && ` Your rating: ${'★'.repeat(r.feedbackRating)}${'☆'.repeat(5 - r.feedbackRating)}.`}
+          {r.feedbackComment && ` “${r.feedbackComment}”`}
         </p>
       )}
 
@@ -103,11 +107,11 @@ export default function NgoRequestDetail() {
           <CardContent className="space-y-1 text-sm">
             {volunteer ? (
               <>
-                <p className="font-medium">{volunteer.volunteerProfile.user.name}</p>
-                <p className="text-muted-foreground">{humanize(volunteer.status)}{volunteer.volunteerProfile.vehicleType && ` · ${volunteer.volunteerProfile.vehicleType}`}</p>
-                {volunteer.volunteerProfile.user.phone && (
-                  <a className="inline-flex items-center text-green-700 hover:underline" href={`tel:${volunteer.volunteerProfile.user.phone}`}>
-                    <Phone className="mr-1 h-3.5 w-3.5" /> {volunteer.volunteerProfile.user.phone}
+                <p className="font-medium">{volunteer.volunteerProfile!.user.name}</p>
+                <p className="text-muted-foreground">{humanize(volunteer.status)}{volunteer.volunteerProfile!.vehicleType && ` · ${volunteer.volunteerProfile!.vehicleType}`}</p>
+                {volunteer.volunteerProfile!.user.phone && (
+                  <a className="inline-flex items-center text-green-700 hover:underline" href={`tel:${volunteer.volunteerProfile!.user.phone}`}>
+                    <Phone className="mr-1 h-3.5 w-3.5" /> {volunteer.volunteerProfile!.user.phone}
                   </a>
                 )}
               </>
@@ -134,10 +138,9 @@ export default function NgoRequestDetail() {
         title="Withdraw this request?" description="Any reserved quantity is released back to the donor." confirmLabel="Withdraw" destructive withReason
         onConfirm={(reason) => act('cancel', { reason }, 'Request withdrawn')()}
       />
-      <ConfirmDialog
+      <ConfirmReceiptDialog
         open={dialog === 'confirm'} onOpenChange={(o) => !o && setDialog(null)}
-        title="Confirm you received the food?" description="This completes the delivery and records its impact." confirmLabel="Confirm receipt"
-        onConfirm={() => act('confirm', { outcome: 'CONFIRMED' }, 'Receipt confirmed – thank you!')()}
+        onConfirm={(input) => act('confirm', { outcome: 'CONFIRMED', ...input }, 'Receipt confirmed – thank you!')()}
       />
       <ConfirmDialog
         open={dialog === 'dispute'} onOpenChange={(o) => !o && setDialog(null)}

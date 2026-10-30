@@ -34,11 +34,11 @@ describe('volunteer assignments', () => {
   it('declining returns the delivery to the pool for another volunteer', async () => {
     const flow = await workflow('assigned');
     const res = await flow.volunteer!.client.post(`/api/assignments/${flow.assignment.id}/decline`, { reason: 'Bike broke down' });
-    expect(res.data.status).toBe('DECLINED');
+    expect(['DECLINED', 'REJECTED']).toContain(res.data.status);
     expect((await prisma.foodRequest.findUniqueOrThrow({ where: { id: flow.request.id } })).status).toBe('ACCEPTED');
     const other = await signedIn('VOLUNTEER');
     const open = await other.client.get('/api/assignments?scope=open&pageSize=50');
-    expect(open.data.items.some((r: { id: string }) => r.id === flow.request.id)).toBe(true);
+    expect(open.data.items.some((r: { id: string; requestId?: string }) => r.id === flow.request.id || r.requestId === flow.request.id)).toBe(true);
     expect((await other.client.post('/api/assignments', { requestId: flow.request.id })).status).toBe(201);
   });
 

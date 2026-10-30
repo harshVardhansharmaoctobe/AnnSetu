@@ -15,14 +15,14 @@ interface Row {
   id: string; status: string; requestedQuantity: number; updatedAt: string;
   donation: { foodName: string; unit: string; pickupAddress: string; latitude: number; longitude: number; donorProfile: { organisationName: string } };
   ngoProfile: { organisationName: string };
-  assignments: { id: string; status: string; volunteerProfile: { user: { name: string } } }[];
+  assignments: { id: string; status: string; volunteerProfile: { user: { name: string } } | null }[];
 }
 interface Volunteer {
   id: string; name: string; phone: string | null;
   volunteerProfile: { id: string; address: string | null; vehicleType: string | null; isAvailable: boolean; latitude: number | null; longitude: number | null } | null;
 }
 
-const FILTERS = ['ACCEPTED', 'VOLUNTEER_ASSIGNED', 'PICKED_UP', 'DELIVERED', 'DISPUTED', 'COMPLETED', ''];
+const FILTERS = ['ACCEPTED', 'VOLUNTEER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'DISPUTED', 'COMPLETED', 'CANCELLED', ''];
 
 function AssignDialog({ row, onClose, onDone }: { row: Row; onClose: () => void; onDone: () => void }) {
   const toast = useToast();
@@ -111,7 +111,7 @@ export default function AdminDeliveriesPage() {
       <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="Filter by status">
         {FILTERS.map((f) => (
           <Button key={f || 'all'} size="sm" variant={status === f ? 'default' : 'outline'} onClick={() => { setStatus(f); setPage(1); }}>
-            {f === 'ACCEPTED' ? 'Needs volunteer' : f ? humanize(f) : 'All'}
+            {f === 'ACCEPTED' ? 'Awaiting volunteer' : f ? humanize(f) : 'All'}
           </Button>
         ))}
       </div>
@@ -130,14 +130,18 @@ export default function AdminDeliveriesPage() {
                           {r.requestedQuantity} {r.donation.unit.toLowerCase()} · {r.donation.donorProfile.organisationName} → {r.ngoProfile.organisationName}
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          Updated {formatDateTime(r.updatedAt)}{assignment && ` · ${assignment.volunteerProfile.user.name} (${humanize(assignment.status)})`}
+                          Updated {formatDateTime(r.updatedAt)}{assignment && ` · ${assignment.volunteerProfile ? `${assignment.volunteerProfile.user.name} (${humanize(assignment.status)})` : 'open to volunteers'}`}
                         </p>
                       </div>
                       <div className="flex items-center gap-2">
                         <StatusBadge status={r.status} />
-                        {r.status === 'ACCEPTED' && <Button size="sm" onClick={() => setAssigning(r)}><UserPlus className="mr-1 h-4 w-4" /> Assign</Button>}
-                        {r.status === 'VOLUNTEER_ASSIGNED' && assignment && (
-                          <Button size="sm" variant="outline" onClick={() => setRemoving(r)}>Remove volunteer</Button>
+                        {r.status === 'ACCEPTED' && assignment?.status === 'PENDING' && (
+                          <Button size="sm" onClick={() => setAssigning(r)}><UserPlus className="mr-1 h-4 w-4" /> Assign</Button>
+                        )}
+                        {assignment && ['ASSIGNED', 'ACCEPTED', 'PICKUP_IN_PROGRESS'].includes(assignment.status) && (
+                          <Button size="sm" variant="outline" onClick={() => setRemoving(r)}>
+                            {assignment.status === 'ASSIGNED' ? 'Withdraw offer' : 'Remove volunteer'}
+                          </Button>
                         )}
                       </div>
                     </li>

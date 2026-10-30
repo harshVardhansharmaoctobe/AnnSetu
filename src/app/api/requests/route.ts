@@ -18,6 +18,7 @@ export const GET = route('requests:list', async (request) => {
 
   const where: Prisma.FoodRequestWhereInput = {
     ...(query.status && { status: query.status }),
+    ...(query.statuses && { status: { in: query.statuses } }),
     ...(query.donationId && { donationId: query.donationId }),
     ...(actor.role === 'NGO' && { ngoProfile: { userId: actor.id } }),
     ...(actor.role === 'DONOR' && { donation: { donorProfile: { userId: actor.id } } }),
@@ -39,7 +40,7 @@ export const GET = route('requests:list', async (request) => {
         },
         ngoProfile: { select: { id: true, organisationName: true, address: true } },
         assignments: {
-          where: { status: { notIn: ['DECLINED', 'CANCELLED'] } },
+          where: { status: { notIn: ['REJECTED', 'CANCELLED'] } },
           take: 1,
           orderBy: { createdAt: 'desc' },
           select: { id: true, status: true, volunteerProfile: { select: { user: { select: { name: true } } } } },

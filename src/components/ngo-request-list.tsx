@@ -8,7 +8,7 @@ import { formatDateTime } from '@/lib/utils';
 export interface NgoRequestRow {
   id: string; status: string; requestedQuantity: number; createdAt: string; updatedAt: string;
   donation: { foodName: string; unit: string; pickupAddress: string; donorProfile: { organisationName: string } };
-  assignments: { volunteerProfile: { user: { name: string } } }[];
+  assignments: { volunteerProfile: { user: { name: string } } | null }[];
 }
 
 export function NgoRequestList({ state, empty }: {
@@ -27,7 +27,7 @@ export function NgoRequestList({ state, empty }: {
               <p className="font-medium">{r.donation.foodName}</p>
               <p className="text-xs text-muted-foreground">
                 {r.requestedQuantity} {r.donation.unit.toLowerCase()} · {r.donation.donorProfile.organisationName} · updated {formatDateTime(r.updatedAt)}
-                {r.assignments[0] && ` · volunteer ${r.assignments[0].volunteerProfile.user.name}`}
+                {r.assignments[0]?.volunteerProfile && ` · volunteer ${r.assignments[0].volunteerProfile.user.name}`}
               </p>
             </div>
             <StatusBadge status={r.status} />

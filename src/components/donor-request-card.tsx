@@ -19,7 +19,7 @@ export interface DonorRequest {
   createdAt: string;
   donation: { id: string; foodName: string; unit: string };
   ngoProfile: { organisationName: string; address: string };
-  assignments?: { volunteerProfile: { user: { name: string } } }[];
+  assignments?: { volunteerProfile: { user: { name: string } } | null }[];
 }
 
 /** Incoming NGO request with approve/reject for the donor. */
@@ -82,7 +82,7 @@ export function DonorRequestCard({ request, onChanged, showDonation = true }: {
         </p>
       )}
       {request.assignments?.[0] && (
-        <p className="mt-2 text-sm text-muted-foreground">Volunteer: {request.assignments[0].volunteerProfile.user.name}</p>
+        <p className="mt-2 text-sm text-muted-foreground">Volunteer: {request.assignments[0].volunteerProfile?.user.name ?? 'open – waiting for a volunteer'}</p>
       )}
       {request.status === 'PENDING' && (
         <div className="mt-3 flex gap-2">

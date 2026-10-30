@@ -1,5 +1,6 @@
 import { BadgeCheck, Droplets, FlaskConical, HandHeart, Leaf, Package, Recycle, Scale, Truck, Users, UtensilsCrossed } from 'lucide-react';
 import { StatCard } from '@/components/states';
+import { BarChart } from '@/components/bar-chart';
 
 type Units = { MEALS: number; KG: number };
 
@@ -8,6 +9,8 @@ export interface ImpactData {
   donations: {
     total: number;
     quantityListed: Units;
+    quantityAvailable: Units;
+    quantityReserved: Units;
     openNow: number;
     completed: number;
     byCategory: { category: string; count: number }[];
@@ -20,6 +23,9 @@ export interface ImpactData {
     openDisputes: number;
     recoveryRatePercent: { MEALS: number | null; KG: number | null };
   };
+  requests: { pending: number; deliveryCompletionRatePercent: number | null; approvedFinalOutcomes: number };
+  recoveredByCategory: { category: string; quantity: Units }[];
+  trends?: { period: string; donationsListed: number; listed: Units; verifiedDeliveries: number; delivered: Units }[];
   participants: { activeVolunteers: number; participatingNgos: number; activeDonors: number; volunteerVerifiedDeliveries: number } | null;
   demo: { donations: number; verifiedDeliveries: number; mealsServed: number; note: string } | null;
   estimates: {
@@ -69,6 +75,18 @@ export function ImpactPanel({ data }: { data: ImpactData }) {
             ({qty(d.quantityAwaitingConfirmation)}){d.openDisputes > 0 && ` · ${d.openDisputes} reported problem(s) under review`}.
           </p>
         )}
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <StatCard label="Available now" value={qty(data.donations.quantityAvailable)} hint="Unreserved, unexpired" icon={Package} tone="blue" />
+          <StatCard label="Reserved for NGOs" value={qty(data.donations.quantityReserved)} hint="Approved, not yet confirmed" icon={Package} tone="amber" />
+          <StatCard label="Pending requests" value={n(data.requests.pending)} hint="Awaiting donor decision" icon={Users} tone="slate" />
+          <StatCard
+            label="Delivery completion rate"
+            value={data.requests.deliveryCompletionRatePercent === null ? '—' : `${data.requests.deliveryCompletionRatePercent}%`}
+            hint={`Of ${data.requests.approvedFinalOutcomes} approved requests that reached an outcome`}
+            icon={BadgeCheck}
+            tone="rose"
+          />
+        </div>
         {data.participants && (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Active donors" value={n(data.participants.activeDonors)} hint="Listed food at least once" icon={Users} tone="slate" />
@@ -101,6 +119,36 @@ export function ImpactPanel({ data }: { data: ImpactData }) {
               ? <>Of the figures above, <strong>{n(data.demo.donations)}</strong> donation(s), <strong>{n(data.demo.verifiedDeliveries)}</strong> verified deliver{data.demo.verifiedDeliveries === 1 ? 'y' : 'ies'} and ≈ <strong>{n(data.demo.mealsServed)}</strong> meals come from demo accounts.</>
               : 'No demo records are included in these figures.'}
           </p>
+        </section>
+      )}
+
+      {data.trends && data.trends.length > 0 && (
+        <section>
+          <SectionTitle icon={Package} title="Trends" hint="Donations listed per period and deliveries verified per period (by confirmation date)." />
+          <div className="rounded-xl border bg-white p-5">
+            <BarChart
+              title="Donations listed and deliveries verified per period"
+              labels={data.trends.map((t) => t.period)}
+              series={[
+                { name: 'Donations listed', color: '#86efac', values: data.trends.map((t) => t.donationsListed) },
+                { name: 'Verified deliveries', color: '#15803d', values: data.trends.map((t) => t.verifiedDeliveries) },
+              ]}
+            />
+          </div>
+        </section>
+      )}
+
+      {data.recoveredByCategory.length > 0 && (
+        <section>
+          <SectionTitle icon={Recycle} title="Food recovered by category" hint="Verified deliveries only." />
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {data.recoveredByCategory.map((c) => (
+              <div key={c.category} className="rounded-xl border bg-white p-4">
+                <p className="text-sm text-muted-foreground">{label(c.category)}</p>
+                <p className="text-lg font-semibold">{qty(c.quantity)}</p>
+              </div>
+            ))}
+          </div>
         </section>
       )}
 

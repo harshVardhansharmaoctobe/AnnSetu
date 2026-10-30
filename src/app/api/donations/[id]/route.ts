@@ -3,7 +3,7 @@ import prisma from '@/lib/db';
 import { requireUser } from '@/lib/api-auth';
 import { notFound, parseBody, route } from '@/lib/api';
 import { donationUpdateSchema } from '@/lib/validations';
-import { updateDonation } from '@/lib/workflow';
+import { deleteDonation, updateDonation } from '@/lib/workflow';
 import { contactSelect } from '@/lib/selects';
 
 export const dynamic = 'force-dynamic';
@@ -78,4 +78,11 @@ export const PATCH = route<Params>('donations:update', async (request, { id }) =
   if (auth.error) return auth.error;
   const input = await parseBody(request, donationUpdateSchema);
   return NextResponse.json(await updateDonation(auth.user, id, input));
+});
+
+// DELETE /api/donations/:id – donor removes a donation that no NGO has requested.
+export const DELETE = route<Params>('donations:delete', async (_request, { id }) => {
+  const auth = await requireUser({ roles: ['DONOR'] });
+  if (auth.error) return auth.error;
+  return NextResponse.json(await deleteDonation(auth.user, id));
 });

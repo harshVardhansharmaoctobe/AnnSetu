@@ -63,8 +63,9 @@ export class Client {
     return { error, session: session.data };
   }
 
-  async upload(fileName: string, bytes: Uint8Array, type: string) {
+  async upload(fileName: string, bytes: Uint8Array, type: string, purpose?: string) {
     const form = new FormData();
+    if (purpose) form.append('purpose', purpose);
     const copy = new Uint8Array(new ArrayBuffer(bytes.length));
     copy.set(bytes);
     form.append('file', new Blob([copy], { type }), fileName);

@@ -53,18 +53,32 @@ enum RequestStatus {
   CANCELLED // withdrawn by NGO, or donation cancelled
   VOLUNTEER_ASSIGNED // a volunteer holds an active assignment
   PICKED_UP // volunteer collected the food
+  IN_TRANSIT // volunteer is on the way to the NGO
   DELIVERED // volunteer delivered with proof
   COMPLETED // NGO confirmed receipt (impact recorded)
   DISPUTED // NGO reported a problem on receipt
 }
 
+// One open assignment exists per approved request. Terminal rows (REJECTED, CANCELLED, COMPLETED) are
+// kept as history; when a volunteer rejects or is removed, a fresh PENDING row is opened in the same transaction.
 enum AssignmentStatus {
-  ASSIGNED // admin offered it; volunteer has not answered
-  ACCEPTED // volunteer committed (or self-claimed)
-  DECLINED // volunteer declined an admin assignment
-  PICKED_UP
-  DELIVERED
-  CANCELLED
+  PENDING // created at donor approval; open to eligible volunteers, no volunteer yet
+  ASSIGNED // an admin offered it to a specific volunteer; awaiting their answer
+  ACCEPTED // volunteer committed
+  REJECTED // volunteer declined (history; a new PENDING assignment replaces it)
+  PICKUP_IN_PROGRESS // volunteer arrived at the pickup point
+  PICKED_UP // food collected
+  IN_TRANSIT // on the way to the NGO
+  DELIVERED // handed over with delivery proof
+  COMPLETED // the NGO confirmed receipt
+  CANCELLED // removed by admin/NGO, request cancelled, or delivery failed
+}
+
+enum UploadPurpose {
+  DONATION_PHOTO
+  PICKUP_PROOF
+  DELIVERY_PROOF
+  AVATAR
 }
 
 enum ProofType {
@@ -110,6 +124,12 @@ enum NotificationType {
   DISPUTE_RAISED
   DISPUTE_RESOLVED
   DONATION_CANCELLED
+  ASSIGNMENT_AVAILABLE
+  ASSIGNMENT_CANCELLED
+  DELIVERY_IN_TRANSIT
+  DELIVERY_FAILED
+  FEEDBACK_RECEIVED
+  PASSWORD_RESET_REQUESTED
   ACCOUNT_APPROVED
   ACCOUNT_REJECTED
   ACCOUNT_SUSPENDED
@@ -122,17 +142,18 @@ enum NotificationType {
 // ──────────────────────────────────────────
 
 model User {
-  id            String        @id @default(cuid())
-  email         String        @unique
-  password      String
-  name          String
-  phone         String?
-  role          UserRole
-  accountStatus AccountStatus @default(PENDING)
-  isDemo        Boolean       @default(false) // created by prisma/seed.ts; lets dashboards separate demo data
-  avatarUrl     String?
-  createdAt     DateTime      @default(now())
-  updatedAt     DateTime      @updatedAt
+  id                String        @id @default(cuid())
+  email             String        @unique
+  password          String
+  name              String
+  phone             String?
+  role              UserRole
+  accountStatus     AccountStatus @default(PENDING)
+  isDemo            Boolean       @default(false) // created by prisma/seed.ts; lets dashboards separate demo data
+  avatarUrl         String?
+  passwordChangedAt DateTime? // sessions issued before this are revoked
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
 
   donorProfile     DonorProfile?
   ngoProfile       NGOProfile?
@@ -141,6 +162,8 @@ model User {
   notifications Notification[]
   auditLogs     AuditLog[]
   proofs        DeliveryProof[]
+  uploads       Upload[]
+  resetTokens   PasswordResetToken[]
 
   @@index([role])
   @@index([accountStatus])
@@ -244,8 +267,11 @@ model FoodRequest {
   disputeReason     String?
   disputeResolution String? // admin's note when a reported problem is resolved
   disputeResolvedAt DateTime?
+  feedbackRating    Int? // 1–5, given by the NGO when confirming receipt
+  feedbackComment   String?
   approvedAt        DateTime?
   pickedUpAt        DateTime?
+  inTransitAt       DateTime?
   deliveredAt       DateTime?
   completedAt       DateTime?
   createdAt         DateTime      @default(now())
@@ -266,20 +292,24 @@ model FoodRequest {
 model VolunteerAssignment {
   id                 String           @id @default(cuid())
   requestId          String
-  volunteerProfileId String
-  status             AssignmentStatus @default(ASSIGNED)
+  volunteerProfileId String? // null while PENDING (open to eligible volunteers)
+  status             AssignmentStatus @default(PENDING)
   assignedById       String? // admin userId, null when self-claimed
   acceptedAt         DateTime?
+  arrivedAt          DateTime?
   pickupTime         DateTime?
+  inTransitAt        DateTime?
   deliveryTime       DateTime?
+  completedAt        DateTime?
+  rejectionReason    String?
   pickupProofUrl     String?
   deliveryProofUrl   String?
   notes              String?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
-  request          FoodRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
-  volunteerProfile VolunteerProfile @relation(fields: [volunteerProfileId], references: [id], onDelete: Cascade)
+  request          FoodRequest       @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  volunteerProfile VolunteerProfile? @relation(fields: [volunteerProfileId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([requestId])
@@ -350,4 +380,33 @@ model AuditLog {
 
   @@index([entity, entityId])
   @@index([createdAt])
+}
+
+model PasswordResetToken {
+  id          String    @id @default(cuid())
+  userId      String
+  tokenHash   String    @unique // SHA-256 of the token; the token itself is never stored
+  expiresAt   DateTime
+  usedAt      DateTime?
+  createdById String? // admin who issued it, null when self-requested
+  createdAt   DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Upload {
+  id           String        @id @default(cuid())
+  fileName     String        @unique // server-generated UUID name
+  url          String        @unique
+  contentType  String
+  size         Int
+  purpose      UploadPurpose
+  uploadedById String
+  createdAt    DateTime      @default(now())
+
+  uploadedBy User @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
+
+  @@index([uploadedById, createdAt])
 }

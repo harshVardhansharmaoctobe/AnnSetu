@@ -54,3 +54,6 @@ playwright-report/
 backend/
 blockchain/
 frontend/
+
+# local-only notes (demo credentials)
+*.local.md

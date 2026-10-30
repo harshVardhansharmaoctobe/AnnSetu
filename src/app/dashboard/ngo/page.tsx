@@ -13,6 +13,10 @@ export default function NgoOverview() {
   const impact = useApi<ImpactData & { profileIncomplete?: boolean }>('/api/impact?scope=me');
   const toConfirm = useApi<ListResult<NgoRequestRow>>('/api/requests?status=DELIVERED&pageSize=10');
   const recent = useApi<ListResult<NgoRequestRow>>('/api/requests?pageSize=6');
+  const approved = useApi<ListResult<NgoRequestRow>>('/api/requests?statuses=ACCEPTED,VOLUNTEER_ASSIGNED&pageSize=1');
+  const active = useApi<ListResult<NgoRequestRow>>('/api/requests?statuses=PICKED_UP,IN_TRANSIT,DELIVERED&pageSize=1');
+  const received = (u?: { MEALS: number; KG: number }) =>
+    u ? [u.MEALS ? `${u.MEALS} meals` : null, u.KG ? `${u.KG} kg` : null].filter(Boolean).join(' + ') || '0' : '–';
 
   return (
     <div className="space-y-6">
@@ -26,11 +30,12 @@ export default function NgoOverview() {
           Complete your <Link href="/dashboard/profile" className="font-semibold underline">NGO profile</Link> (address and capacity) before requesting food.
         </div>
       )}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Awaiting your confirmation" value={toConfirm.data?.total ?? '–'} icon={CheckCircle2} tone="amber" />
-        <StatCard label="Deliveries received" value={impact.data?.deliveries?.completed ?? '–'} icon={Truck} />
-        <StatCard label="Meals received (est.)" value={impact.data?.estimates?.mealsServed ?? '–'} hint="From confirmed deliveries" icon={UtensilsCrossed} tone="rose" />
-        <StatCard label="Total requests" value={recent.data?.total ?? '–'} icon={ClipboardList} tone="blue" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <StatCard label="Food received (verified)" value={received(impact.data?.deliveries?.quantityVerified)} hint={impact.data?.estimates ? `≈ ${impact.data.estimates.mealsServed} meals (est.)` : undefined} icon={UtensilsCrossed} tone="rose" />
+        <StatCard label="Pending requests" value={impact.data?.requests?.pending ?? '–'} hint="Awaiting donor decision" icon={ClipboardList} tone="slate" />
+        <StatCard label="Approved requests" value={approved.data?.total ?? '–'} hint="Waiting for pickup" icon={CheckCircle2} tone="blue" />
+        <StatCard label="Active deliveries" value={active.data?.total ?? '–'} hint={toConfirm.data?.total ? `${toConfirm.data.total} awaiting your confirmation` : 'Picked up or on the way'} icon={Truck} tone="amber" />
+        <StatCard label="Completed deliveries" value={impact.data?.deliveries?.completed ?? '–'} hint="Confirmed by you" icon={CheckCircle2} />
       </div>
 
       <Card>

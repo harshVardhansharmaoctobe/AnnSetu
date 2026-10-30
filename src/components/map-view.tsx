@@ -36,6 +36,7 @@ export function MapView({
   onPick,
   picked,
   legend,
+  route,
   className = 'h-80',
   label = 'Map',
 }: {
@@ -45,6 +46,8 @@ export function MapView({
   onPick?: (pos: { lat: number; lng: number }) => void;
   picked?: { lat: number; lng: number } | null;
   legend?: { tone: MarkerTone; label: string }[];
+  /** Straight-line route drawn between points (e.g. pickup → drop-off); not road directions. */
+  route?: { lat: number; lng: number }[];
   className?: string;
   label?: string;
 }) {
@@ -117,11 +120,16 @@ export function MapView({
       L.marker([picked.lat, picked.lng], { icon: icon('red'), title: 'Selected location', keyboard: false }).addTo(layer.current);
       points.push([picked.lat, picked.lng]);
     }
+    const routePoints = (route ?? []).filter((p) => hasValidCoords(p.lat, p.lng));
+    if (routePoints.length >= 2) {
+      L.polyline(routePoints.map((p) => [p.lat, p.lng] as [number, number]), { color: '#2563eb', weight: 3, dashArray: '6 6', opacity: 0.8 })
+        .addTo(layer.current);
+    }
     if (center && hasValidCoords(center.lat, center.lng)) points.push([center.lat, center.lng]);
     if (points.length > 1) map.current.fitBounds(points, { padding: [30, 30], maxZoom: 14 });
     else if (points.length === 1) map.current.setView(points[0], Math.max(map.current.getZoom(), 13));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [leaflet, markers, picked, center]);
+  }, [leaflet, markers, picked, center, route]);
 
   if (failed) {
     return (

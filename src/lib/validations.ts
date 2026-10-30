@@ -22,18 +22,23 @@ export const loginSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-// Public registration can never create ADMIN accounts; admins are provisioned directly in the database.
-export const registerSchema = z.object({
-  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100),
-  email: z.string().trim().toLowerCase().email('Invalid email address'),
-  password: z.string().min(8, 'Password must be at least 8 characters').max(128),
+
+
+const newPassword = z.string().min(8, 'Password must be at least 8 characters').max(128);
+
+export const forgotPasswordSchema = z.object({ email: z.string().trim().toLowerCase().email('Invalid email address') }).strict();
+
+export const resetPasswordSchema = z.object({
+  token: z.string().min(20).max(200),
+  password: newPassword,
   confirmPassword: z.string(),
-  phone: optionalText(20),
-  role: z.enum(['DONOR', 'NGO', 'VOLUNTEER']),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: 'Passwords do not match',
-  path: ['confirmPassword'],
-});
+}).strict().refine((d) => d.password === d.confirmPassword, { message: 'Passwords do not match', path: ['confirmPassword'] });
+
+export const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Enter your current password').max(128),
+  newPassword,
+  confirmPassword: z.string(),
+}).strict().refine((d) => d.newPassword === d.confirmPassword, { message: 'Passwords do not match', path: ['confirmPassword'] });
 
 // ─── Profile Schemas ───
 export const donorProfileSchema = z.object({
@@ -71,10 +76,35 @@ export const volunteerProfileSchema = z.object({
 export const profileUpdateSchema = z.object({
   name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100).optional(),
   phone: z.string().trim().max(20, 'Phone number is too long').optional(),
+  avatarUrl: uploadUrl.nullable().optional(),
   donorProfile: donorProfileSchema.strict().optional(),
   ngoProfile: ngoProfileSchema.strict().optional(),
   volunteerProfile: volunteerProfileSchema.strict().optional(),
 }).strict();
+
+// ─── Registration ───
+// Public registration can never create ADMIN accounts; admins are provisioned directly in the database.
+// Each role's form may include that role's profile (organisation details, location); it is optional
+// here because pending users can also complete it later from their profile page.
+export const registerSchema = z.object({
+  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100),
+  email: z.string().trim().toLowerCase().email('Invalid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters').max(128),
+  confirmPassword: z.string(),
+  phone: optionalText(20),
+  role: z.enum(['DONOR', 'NGO', 'VOLUNTEER']),
+  donorProfile: donorProfileSchema.strict().optional(),
+  ngoProfile: ngoProfileSchema.strict().optional(),
+  volunteerProfile: volunteerProfileSchema.strict().optional(),
+}).superRefine((data, ctx) => {
+  if (data.password !== data.confirmPassword) {
+    ctx.addIssue({ code: 'custom', path: ['confirmPassword'], message: 'Passwords do not match' });
+  }
+  const allowed = { DONOR: 'donorProfile', NGO: 'ngoProfile', VOLUNTEER: 'volunteerProfile' }[data.role];
+  for (const key of ['donorProfile', 'ngoProfile', 'volunteerProfile'] as const) {
+    if (data[key] && key !== allowed) ctx.addIssue({ code: 'custom', path: [key], message: `Not allowed for a ${data.role} account` });
+  }
+});
 
 // ─── Food Donation Schemas ───
 const MAX_PICKUP_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -142,7 +172,12 @@ export const foodRequestSchema = z.object({
 export const reasonSchema = z.object({ reason: optionalText(300) }).strict();
 
 export const confirmReceiptSchema = z.discriminatedUnion('outcome', [
-  z.object({ outcome: z.literal('CONFIRMED'), notes: optionalText(500) }).strict(),
+  z.object({
+    outcome: z.literal('CONFIRMED'),
+    notes: optionalText(500),
+    rating: z.number().int().min(1).max(5).optional(),
+    feedback: optionalText(500),
+  }).strict(),
   z.object({
     outcome: z.literal('DISPUTED'),
     disputeReason: z.string().trim().min(5, 'Describe the problem').max(500),
@@ -165,6 +200,13 @@ export const assignmentCreateSchema = z.object({
 export const pickupSchema = z.object({
   photoUrl: uploadUrl.optional(),
   notes: optionalText(500),
+}).strict();
+
+export const assignSchema = z.object({ volunteerProfileId: z.string().min(1).max(40) }).strict();
+export const emptyBodySchema = z.object({}).strict();
+
+export const failSchema = z.object({
+  reason: z.string().trim().min(5, 'Describe what went wrong (at least 5 characters)').max(300),
 }).strict();
 
 export const deliverySchema = z.object({
@@ -201,17 +243,28 @@ export const donationQuerySchema = z.object({
   lat: z.coerce.number().min(-90).max(90).optional(),
   lng: z.coerce.number().min(-180).max(180).optional(),
   radiusKm: z.coerce.number().positive().max(200).optional(),
+  minQuantity: z.coerce.number().positive().max(100_000).optional(),
   page,
   pageSize,
 });
 
 const REQUEST_STATUSES = [
   'PENDING', 'ACCEPTED', 'REJECTED', 'CANCELLED', 'VOLUNTEER_ASSIGNED',
-  'PICKED_UP', 'DELIVERED', 'COMPLETED', 'DISPUTED',
+  'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED', 'DISPUTED',
 ] as const;
 
 export const requestQuerySchema = z.object({
   status: z.enum(REQUEST_STATUSES).optional(),
+  // Comma-separated statuses for grouped views (e.g. active deliveries).
+  statuses: z.string().max(200).optional().transform((v, ctx) => {
+    if (!v) return undefined;
+    const list = v.split(',').map((x) => x.trim()).filter(Boolean);
+    if (list.length > REQUEST_STATUSES.length || list.some((x) => !(REQUEST_STATUSES as readonly string[]).includes(x))) {
+      ctx.addIssue({ code: 'custom', message: 'Unknown status' });
+      return z.NEVER;
+    }
+    return list as (typeof REQUEST_STATUSES)[number][];
+  }),
   donationId: z.string().max(40).optional(),
   page,
   pageSize,
@@ -219,7 +272,8 @@ export const requestQuerySchema = z.object({
 
 export const assignmentQuerySchema = z.object({
   scope: z.enum(['mine', 'open', 'all']).default('mine'),
-  status: z.enum(['ASSIGNED', 'ACCEPTED', 'DECLINED', 'PICKED_UP', 'DELIVERED', 'CANCELLED']).optional(),
+  status: z.enum(['PENDING', 'ASSIGNED', 'ACCEPTED', 'REJECTED', 'PICKUP_IN_PROGRESS', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED', 'CANCELLED']).optional(),
+  group: z.enum(['active', 'history']).optional(),
   page,
   pageSize,
 });

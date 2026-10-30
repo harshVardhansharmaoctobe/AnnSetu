@@ -15,6 +15,8 @@ interface DonationRow {
   safePickupDeadline: string; requestCounts: Record<string, number>;
 }
 
+const qty = (u?: { MEALS: number; KG: number }) => u ? [u.MEALS ? `${u.MEALS} meals` : null, u.KG ? `${u.KG} kg` : null].filter(Boolean).join(' + ') || '0' : '–';
+
 export default function DonorOverview() {
   const impact = useApi<ImpactData & { profileIncomplete?: boolean }>('/api/impact?scope=me');
   const pending = useApi<ListResult<DonorRequest>>('/api/requests?status=PENDING&pageSize=10');
@@ -40,17 +42,13 @@ export default function DonorOverview() {
         </div>
       )}
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard label="Donations listed" value={impact.data?.donations?.total ?? '–'} icon={Package} />
-        <StatCard label="Open right now" value={impact.data?.donations?.openNow ?? '–'} icon={Leaf} tone="blue" />
-        <StatCard label="Deliveries confirmed" value={impact.data?.deliveries?.completed ?? '–'} icon={Truck} tone="amber" />
-        <StatCard
-          label="Meals served (est.)"
-          value={impact.data?.estimates?.mealsServed ?? '–'}
-          hint="From NGO-confirmed deliveries"
-          icon={UtensilsCrossed}
-          tone="rose"
-        />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <StatCard label="Total food donations" value={impact.data?.donations?.total ?? '–'} hint={qty(impact.data?.donations?.quantityListed)} icon={Package} />
+        <StatCard label="Available food" value={qty(impact.data?.donations?.quantityAvailable)} hint={`${impact.data?.donations?.openNow ?? 0} open listing(s)`} icon={Leaf} tone="blue" />
+        <StatCard label="Reserved food" value={qty(impact.data?.donations?.quantityReserved)} hint="Approved for NGOs, not yet confirmed" icon={Inbox} tone="amber" />
+        <StatCard label="Delivered (verified)" value={qty(impact.data?.deliveries?.quantityVerified)} hint={`${impact.data?.deliveries?.completed ?? 0} confirmed deliveries`} icon={Truck} />
+        <StatCard label="Pending requests" value={impact.data?.requests?.pending ?? '–'} hint="Awaiting your decision" icon={Inbox} tone="rose" />
+        <StatCard label="Completed donations" value={impact.data?.donations?.completed ?? '–'} hint={impact.data?.estimates ? `≈ ${impact.data.estimates.mealsServed} meals served (est.)` : undefined} icon={UtensilsCrossed} tone="slate" />
       </div>
 
       <Card>

@@ -1,3 +1,4 @@
+import prisma from '@/lib/db';
 import { requireUser } from '@/lib/api-auth';
 import { notFound, route } from '@/lib/api';
 import { CONTENT_TYPES, diskStorage, STORED_NAME_PATTERN, type ImageExtension } from '@/lib/uploads';
@@ -9,6 +10,9 @@ export const GET = route<{ name: string }>('uploads:get', async (_request, { nam
   const auth = await requireUser({ statuses: ['APPROVED', 'PENDING', 'REJECTED'] });
   if (auth.error) return auth.error;
   if (!STORED_NAME_PATTERN.test(name)) throw notFound('File not found');
+  // Only files registered through the upload API are served.
+  const meta = await prisma.upload.findUnique({ where: { fileName: name }, select: { id: true } });
+  if (!meta) throw notFound('File not found');
 
   const data = await diskStorage.read(name);
   if (!data) throw notFound('File not found');

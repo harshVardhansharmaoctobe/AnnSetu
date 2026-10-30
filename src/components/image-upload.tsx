@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { ImagePlus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/states';
-import { uploadImage, type ApiClientError } from '@/lib/client';
+import { uploadImage, type ApiClientError, type UploadPurpose } from '@/lib/client';
 
 const ACCEPT = 'image/jpeg,image/png,image/webp';
 
@@ -15,12 +15,14 @@ export function ImageUpload({
   label = 'Add photo',
   required,
   id = 'image-upload',
+  purpose,
 }: {
   value: string | null;
   onChange: (url: string | null) => void;
   label?: string;
   required?: boolean;
   id?: string;
+  purpose: UploadPurpose;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
@@ -35,7 +37,7 @@ export function ImageUpload({
     }
     setBusy(true);
     try {
-      onChange(await uploadImage(file));
+      onChange(await uploadImage(file, purpose));
     } catch (e) {
       setError((e as ApiClientError).message);
     } finally {

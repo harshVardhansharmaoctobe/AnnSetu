@@ -1,5 +1,6 @@
 import { readFileSync } from 'fs';
 import { expect, test, type Browser, type Page } from '@playwright/test';
+import { testPrisma } from '../support/test-db';
 
 const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
 const fixture = () => JSON.parse(readFileSync('test-results/e2e-fixture.json', 'utf8')) as { adminEmail: string; adminPassword: string };
@@ -91,7 +92,7 @@ test('full food rescue: registration → approval → donation → request → d
     await expect(donor).toHaveURL(/\/dashboard\/donor$/);
     await donor.goto('/dashboard/donor/donations/new');
     await donor.getByLabel('Food title').fill(FOOD);
-    await donor.getByLabel('Quantity').fill('20');
+    await donor.getByLabel('Quantity').fill('50');
     await donor.getByLabel('Storage conditions').fill('Hot-held in sealed trays');
     await donor.getByLabel('Special handling instructions').fill('Keep upright');
     await donor.getByTestId('donation-photo').setInputFiles({ name: 'biryani.png', mimeType: 'image/png', buffer: PNG });
@@ -123,11 +124,13 @@ test('full food rescue: registration → approval → donation → request → d
     await expect(ngo.getByText('Pending').first()).toBeVisible();
   });
 
-  await test.step('donor approves the request', async () => {
+  await test.step('donor approves the request: 20 of 50 reserved, 30 still available', async () => {
     await donor.goto('/dashboard/donor');
     const request = donor.getByTestId('donor-request').filter({ hasText: people.ngo.org });
     await request.getByRole('button', { name: 'Approve' }).click();
     await expect(donor.getByText('Request approved')).toBeVisible();
+    await donor.goto('/dashboard/donor/donations');
+    await expect(donor.getByRole('link', { name: new RegExp(FOOD) })).toContainText('30 of 50 meals unreserved');
   });
 
   await test.step('admin assigns the volunteer', async () => {
@@ -139,14 +142,33 @@ test('full food rescue: registration → approval → donation → request → d
     await expect(admin.getByText('Volunteer assigned')).toBeVisible();
   });
 
-  await test.step('volunteer accepts, picks up and delivers with proof', async () => {
+  await test.step('volunteer receives and accepts the assignment', async () => {
+    await volunteer.goto('/dashboard/notifications');
+    await expect(volunteer.getByTestId('notification').filter({ hasText: 'New delivery assigned to you' })).toBeVisible();
     await volunteer.goto('/dashboard');
-    await expect(volunteer).toHaveURL(/\/dashboard\/volunteer$/);
+    await expect(volunteer).toHaveURL(/\/dashboard\/volunteer/);
+    // The dashboard opens on "My assignments" because the volunteer has an offer waiting.
     await volunteer.getByTestId('assignment-card').filter({ hasText: FOOD }).click();
+    await expect(volunteer.getByText('An admin asked you to take this delivery')).toBeVisible();
     await volunteer.getByRole('button', { name: 'Accept' }).click();
-    await expect(volunteer.getByText('Assignment accepted')).toBeVisible();
-    await volunteer.getByRole('button', { name: 'I have picked up the food' }).click();
+    await expect(volunteer.getByText('Delivery accepted')).toBeVisible();
+  });
+
+  await test.step('volunteer sees both locations, arrives, collects with pickup proof, travels and delivers with proof', async () => {
+    const map = volunteer.getByRole('region', { name: 'Pickup and drop-off map' });
+    await expect(map.locator(`[title="Pickup: ${people.donor.org}"]`)).toBeVisible();
+    await expect(map.locator(`[title="Drop-off: ${people.ngo.org}"]`)).toBeVisible();
+
+    await volunteer.getByRole('button', { name: 'I have arrived at pickup' }).click();
+    await expect(volunteer.getByText('Arrival recorded – the donor has been notified')).toBeVisible();
+
+    await volunteer.getByTestId('pickup-photo').setInputFiles({ name: 'pickup.png', mimeType: 'image/png', buffer: PNG });
+    await expect(volunteer.getByAltText('Uploaded')).toBeVisible();
+    await volunteer.getByRole('button', { name: 'I have collected the food' }).click();
     await expect(volunteer.getByText('Pickup confirmed')).toBeVisible();
+
+    await volunteer.getByRole('button', { name: 'Mark in transit' }).click();
+    await expect(volunteer.getByText('Marked in transit – the NGO has been notified')).toBeVisible();
 
     await expect(volunteer.getByRole('button', { name: 'Mark as delivered' })).toBeDisabled(); // proof required
     await volunteer.getByTestId('delivery-photo').setInputFiles({ name: 'handover.png', mimeType: 'image/png', buffer: PNG });
@@ -156,11 +178,30 @@ test('full food rescue: registration → approval → donation → request → d
     await expect(volunteer.getByText('Delivery completed – the NGO will confirm receipt')).toBeVisible();
   });
 
-  await test.step('NGO confirms receipt and impact is recorded', async () => {
+  await test.step('NGO confirms receipt with feedback and impact is recorded', async () => {
     await ngo.reload();
     await ngo.getByRole('button', { name: 'Confirm receipt' }).click();
-    await ngo.getByRole('dialog').getByRole('button', { name: 'Confirm receipt' }).click();
+    const dialog = ngo.getByRole('dialog');
+    await dialog.getByRole('radio', { name: '5 stars' }).click();
+    await dialog.getByLabel('Feedback for the donor and volunteer (optional)').fill('Hot and on time, thank you!');
+    await dialog.getByTestId('confirm-receipt-submit').click();
     await expect(ngo.getByText('Impact recorded: ≈ 20 meals')).toBeVisible();
+  });
+
+  await test.step('database records hold the exact final quantities', async () => {
+    const prisma = testPrisma();
+    const donation = await prisma.foodDonation.findFirstOrThrow({
+      where: { foodName: FOOD },
+      include: { requests: { include: { assignments: true, proofs: true, impact: true } } },
+    });
+    expect(donation).toMatchObject({ quantity: 50, remainingQuantity: 30, status: 'PARTIALLY_RESERVED' });
+    expect(donation.requests).toHaveLength(1);
+    const [request] = donation.requests;
+    expect(request).toMatchObject({ requestedQuantity: 20, deliveredQuantity: 20, status: 'COMPLETED', feedbackRating: 5 });
+    expect(request.assignments.map((a) => a.status)).toEqual(['COMPLETED']);
+    expect(request.proofs.map((p) => p.type).sort()).toEqual(['DELIVERY', 'PICKUP']);
+    expect(request.proofs.every((p) => p.photoUrl?.startsWith('/api/uploads/'))).toBe(true);
+    expect(request.impact).toMatchObject({ mealsRescued: 20 });
   });
 
   await test.step('admin sees the completed delivery and live impact numbers', async () => {
@@ -173,8 +214,11 @@ test('full food rescue: registration → approval → donation → request → d
 
     await admin.goto('/dashboard/impact');
     const panel = admin.getByTestId('impact-panel');
+    await expect(panel.getByText('Total food listed').locator('..').locator('..')).toContainText('50 meals');
+    await expect(panel.getByText('Available now').locator('..').locator('..')).toContainText('30 meals');
     await expect(panel.getByText('Food delivered (verified)').locator('..').locator('..')).toContainText('20 meals');
-    await expect(panel.getByText('Verified deliveries', { exact: true }).locator('..').locator('..')).toContainText('1');
+    // The stat card label is a <p>; the trend chart legend uses the same words in a <span>.
+    await expect(panel.locator('p').getByText('Verified deliveries', { exact: true }).locator('..').locator('..')).toContainText('1');
     await expect(panel.getByText('Meals served (est.)').locator('..').locator('..')).toContainText('20');
     await expect(panel.getByTestId('impact-demo')).toContainText('No demo records are included');
   });
@@ -187,7 +231,8 @@ test('full food rescue: registration → approval → donation → request → d
   });
 
   await test.step('logout ends the session', async () => {
-    await donor.getByRole('button', { name: 'Sign out' }).click();
+    await donor.getByTestId('user-menu').click();
+    await donor.getByRole('menuitem', { name: 'Sign out' }).click();
     await donor.waitForURL((url) => url.pathname === '/');
     await donor.goto('/dashboard');
     await expect(donor).toHaveURL(/\/login/);

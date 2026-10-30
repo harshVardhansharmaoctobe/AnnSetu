@@ -9,6 +9,7 @@ const STEPS = [
   { status: 'ACCEPTED', label: 'Approved', at: 'approvedAt' },
   { status: 'VOLUNTEER_ASSIGNED', label: 'Volunteer assigned', at: null },
   { status: 'PICKED_UP', label: 'Picked up', at: 'pickedUpAt' },
+  { status: 'IN_TRANSIT', label: 'In transit', at: 'inTransitAt' },
   { status: 'DELIVERED', label: 'Delivered', at: 'deliveredAt' },
   { status: 'COMPLETED', label: 'Receipt confirmed', at: 'completedAt' },
 ] as const;
@@ -19,6 +20,7 @@ export interface ProgressRequest {
   createdAt: string;
   approvedAt?: string | null;
   pickedUpAt?: string | null;
+  inTransitAt?: string | null;
   deliveredAt?: string | null;
   completedAt?: string | null;
   rejectionReason?: string | null;
@@ -38,7 +40,7 @@ export function RequestProgress({ request }: { request: ProgressRequest }) {
 
   return (
     <div>
-      <ol className="grid grid-cols-3 gap-y-4 sm:grid-cols-6" aria-label="Delivery progress">
+      <ol className="grid grid-cols-4 gap-y-4 sm:grid-cols-7" aria-label="Delivery progress">
         {STEPS.map((step, i) => {
           const done = i <= current;
           const at = step.at ? (request as unknown as Record<string, string | null | undefined>)[step.at] : null;

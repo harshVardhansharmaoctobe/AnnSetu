@@ -14,6 +14,7 @@ import { IMPACT_ESTIMATES } from '@/lib/matching';
  */
 
 type UnitTotals = { MEALS: number; KG: number };
+type Units = UnitTotals;
 const emptyUnits = (): UnitTotals => ({ MEALS: 0, KG: 0 });
 const r2 = (n: number | null | undefined) => Math.round((n ?? 0) * 100) / 100;
 
@@ -70,6 +71,48 @@ export async function getImpactStats(scope: ImpactScope = { kind: 'platform' }) 
       }),
     ]);
 
+  const now = new Date();
+  const [availableByUnit, reservedRows, pendingRequests, approvedFinal, verifiedByCategory] = await Promise.all([
+    // Available: unreserved quantity on open, unexpired listings.
+    prisma.foodDonation.groupBy({
+      by: ['unit'],
+      where: { ...donationWhere, status: { in: ['AVAILABLE', 'PARTIALLY_RESERVED'] }, safePickupDeadline: { gt: now } },
+      _sum: { remainingQuantity: true },
+    }),
+    // Reserved: approved for an NGO but not yet verified as received.
+    prisma.foodRequest.findMany({
+      where: { ...requestWhere, status: { in: ['ACCEPTED', 'VOLUNTEER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'] } },
+      select: deliveredSelect,
+      take: 10_000,
+    }),
+    prisma.foodRequest.count({ where: { ...requestWhere, status: 'PENDING' } }),
+    // Approved requests that reached a final outcome: delivered and confirmed, or not delivered.
+    prisma.foodRequest.groupBy({
+      by: ['status'],
+      where: {
+        ...requestWhere,
+        approvedAt: { not: null },
+        OR: [{ status: { in: ['COMPLETED', 'CANCELLED'] } }, { status: 'DISPUTED', disputeResolvedAt: { not: null } }],
+      },
+      _count: true,
+    }),
+    prisma.foodRequest.findMany({
+      where: { ...requestWhere, status: 'COMPLETED' },
+      select: { deliveredQuantity: true, requestedQuantity: true, donation: { select: { unit: true, foodCategory: true } } },
+      take: 10_000,
+    }),
+  ]);
+  const quantityAvailable = emptyUnits();
+  for (const row of availableByUnit) quantityAvailable[row.unit] = r2(row._sum.remainingQuantity);
+  const finalCounts = Object.fromEntries(approvedFinal.map((g) => [g.status, g._count])) as Record<string, number>;
+  const finalTotal = (finalCounts.COMPLETED ?? 0) + (finalCounts.CANCELLED ?? 0) + (finalCounts.DISPUTED ?? 0);
+  const recovered = new Map<string, Units>();
+  for (const row of verifiedByCategory) {
+    const entry = recovered.get(row.donation.foodCategory) ?? emptyUnits();
+    entry[row.donation.unit] = r2(entry[row.donation.unit] + (row.deliveredQuantity ?? row.requestedQuantity));
+    recovered.set(row.donation.foodCategory, entry);
+  }
+
   const quantityListed = emptyUnits();
   for (const row of listedByUnit) quantityListed[row.unit] = r2(row._sum.quantity);
   const quantityVerified = sumByUnit(verifiedRows);
@@ -81,7 +124,7 @@ export async function getImpactStats(scope: ImpactScope = { kind: 'platform' }) 
     const demoDonor = { donorProfile: { user: { isDemo: true } } } satisfies Prisma.FoodDonationWhereInput;
     const [activeVolunteers, participatingNgos, activeDonors, volunteerVerifiedDeliveries, demoDonations, demoImpact] = await Promise.all([
       prisma.volunteerProfile.count({
-        where: { user: { accountStatus: 'APPROVED' }, assignments: { some: { status: { in: ['ACCEPTED', 'PICKED_UP', 'DELIVERED'] } } } },
+        where: { user: { accountStatus: 'APPROVED' }, assignments: { some: { status: { in: ['ACCEPTED', 'PICKUP_IN_PROGRESS', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED', 'COMPLETED'] } } } },
       }),
       prisma.nGOProfile.count({
         where: { user: { accountStatus: 'APPROVED' }, requests: { some: { status: { notIn: ['CANCELLED'] } } } },
@@ -109,10 +152,19 @@ export async function getImpactStats(scope: ImpactScope = { kind: 'platform' }) 
     donations: {
       total: donationCount,
       quantityListed,
+      quantityAvailable,
+      quantityReserved: sumByUnit(reservedRows),
       openNow: openDonations,
       completed: completedDonations,
       byCategory: byCategory.map((c) => ({ category: c.foodCategory, count: c._count })),
     },
+    requests: {
+      pending: pendingRequests,
+      // Of approved requests that reached a final outcome, the share delivered and confirmed.
+      deliveryCompletionRatePercent: finalTotal > 0 ? r2(((finalCounts.COMPLETED ?? 0) / finalTotal) * 100) : null,
+      approvedFinalOutcomes: finalTotal,
+    },
+    recoveredByCategory: [...recovered.entries()].map(([category, quantity]) => ({ category, quantity })),
     deliveries: {
       // Verified = confirmed by the receiving NGO (or verified by an admin after a reported problem).
       completed: verifiedRows.length,
@@ -145,7 +197,7 @@ export async function getAdminStats() {
     prisma.user.groupBy({ by: ['role', 'accountStatus'], _count: true }),
     prisma.foodDonation.groupBy({ by: ['status'], _count: true }),
     prisma.foodRequest.groupBy({ by: ['status'], _count: true }),
-    prisma.volunteerAssignment.count({ where: { status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP'] } } }),
+    prisma.volunteerAssignment.count({ where: { status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKUP_IN_PROGRESS', 'PICKED_UP', 'IN_TRANSIT'] } } }),
     prisma.foodRequest.count({ where: { status: 'ACCEPTED' } }),
     prisma.foodRequest.count({ where: { status: 'DISPUTED', disputeResolvedAt: null } }),
   ]);
@@ -163,5 +215,100 @@ export async function getAdminStats() {
     activeAssignments,
     awaitingVolunteer: unassigned,
     openDisputes,
+  };
+}
+
+// ─── Trends and analytics ───
+
+export type TrendInterval = 'day' | 'week' | 'month';
+const DAY_MS = 86_400_000;
+
+function bucketStart(d: Date, interval: TrendInterval): Date {
+  const x = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  if (interval === 'week') x.setUTCDate(x.getUTCDate() - ((x.getUTCDay() + 6) % 7)); // Monday
+  if (interval === 'month') x.setUTCDate(1);
+  return x;
+}
+const bucketKey = (d: Date, interval: TrendInterval) =>
+  interval === 'month' ? bucketStart(d, interval).toISOString().slice(0, 7) : bucketStart(d, interval).toISOString().slice(0, 10);
+
+function nextBucket(d: Date, interval: TrendInterval) {
+  const x = new Date(d);
+  if (interval === 'day') x.setUTCDate(x.getUTCDate() + 1);
+  else if (interval === 'week') x.setUTCDate(x.getUTCDate() + 7);
+  else x.setUTCMonth(x.getUTCMonth() + 1);
+  return x;
+}
+
+/** Default ranges: 30 days by day, 12 weeks by week, 12 months by month. Ranges are capped at 366 days. */
+export function normaliseRange(input: { from?: Date; to?: Date; interval?: TrendInterval }) {
+  const interval = input.interval ?? 'day';
+  const to = input.to ?? new Date();
+  const span = interval === 'day' ? 30 * DAY_MS : interval === 'week' ? 84 * DAY_MS : 365 * DAY_MS;
+  let from = input.from ?? new Date(to.getTime() - span);
+  if (to.getTime() - from.getTime() > 366 * DAY_MS) from = new Date(to.getTime() - 366 * DAY_MS);
+  return { from, to, interval };
+}
+
+/** Listings (by creation date) and verified deliveries (by confirmation date) per period. */
+export async function getTrends(range: { from: Date; to: Date; interval: TrendInterval }) {
+  const [listed, verified] = await Promise.all([
+    prisma.foodDonation.findMany({
+      where: { createdAt: { gte: range.from, lte: range.to }, status: { not: 'CANCELLED' } },
+      select: { createdAt: true, quantity: true, unit: true },
+      take: 10_000,
+    }),
+    prisma.foodRequest.findMany({
+      where: { status: 'COMPLETED', completedAt: { gte: range.from, lte: range.to } },
+      select: { completedAt: true, deliveredQuantity: true, requestedQuantity: true, donation: { select: { unit: true } } },
+      take: 10_000,
+    }),
+  ]);
+  const buckets = new Map<string, { period: string; donationsListed: number; listed: Units; verifiedDeliveries: number; delivered: Units }>();
+  for (let d = bucketStart(range.from, range.interval); d <= range.to && buckets.size < 400; d = nextBucket(d, range.interval)) {
+    const key = bucketKey(d, range.interval);
+    buckets.set(key, { period: key, donationsListed: 0, listed: emptyUnits(), verifiedDeliveries: 0, delivered: emptyUnits() });
+  }
+  for (const d of listed) {
+    const b = buckets.get(bucketKey(d.createdAt, range.interval));
+    if (b) { b.donationsListed += 1; b.listed[d.unit] = r2(b.listed[d.unit] + d.quantity); }
+  }
+  for (const r of verified) {
+    const b = r.completedAt && buckets.get(bucketKey(r.completedAt, range.interval));
+    if (b) { b.verifiedDeliveries += 1; b.delivered[r.donation.unit] = r2(b.delivered[r.donation.unit] + (r.deliveredQuantity ?? r.requestedQuantity)); }
+  }
+  return [...buckets.values()];
+}
+
+/** Admin reports for a date range: donations, deliveries, users and food recovery. */
+export async function getAnalytics(range: { from: Date; to: Date; interval: TrendInterval }) {
+  const created = { gte: range.from, lte: range.to };
+  const [trends, donationsByStatus, requestsByStatus, newUsers, verified, assignmentsByStatus] = await Promise.all([
+    getTrends(range),
+    prisma.foodDonation.groupBy({ by: ['status'], where: { createdAt: created }, _count: true, _sum: { quantity: true } }),
+    prisma.foodRequest.groupBy({ by: ['status'], where: { createdAt: created }, _count: true, _sum: { requestedQuantity: true } }),
+    prisma.user.groupBy({ by: ['role', 'accountStatus'], where: { createdAt: created }, _count: true }),
+    prisma.foodRequest.findMany({
+      where: { status: 'COMPLETED', completedAt: created },
+      select: { deliveredQuantity: true, requestedQuantity: true, donation: { select: { unit: true, foodCategory: true } } },
+      take: 10_000,
+    }),
+    prisma.volunteerAssignment.groupBy({ by: ['status'], where: { createdAt: created }, _count: true }),
+  ]);
+  const recovered = new Map<string, Units>();
+  for (const row of verified) {
+    const entry = recovered.get(row.donation.foodCategory) ?? emptyUnits();
+    entry[row.donation.unit] = r2(entry[row.donation.unit] + (row.deliveredQuantity ?? row.requestedQuantity));
+    recovered.set(row.donation.foodCategory, entry);
+  }
+  return {
+    range: { from: range.from.toISOString(), to: range.to.toISOString(), interval: range.interval },
+    trends,
+    donations: donationsByStatus.map((d) => ({ status: d.status, count: d._count, quantity: r2(d._sum.quantity) })),
+    requests: requestsByStatus.map((r) => ({ status: r.status, count: r._count, quantity: r2(r._sum.requestedQuantity) })),
+    assignments: assignmentsByStatus.map((a) => ({ status: a.status, count: a._count })),
+    newUsers: newUsers.map((u) => ({ role: u.role, status: u.accountStatus, count: u._count })),
+    recoveredByCategory: [...recovered.entries()].map(([category, quantity]) => ({ category, quantity })),
+    verifiedDeliveries: verified.length,
   };
 }

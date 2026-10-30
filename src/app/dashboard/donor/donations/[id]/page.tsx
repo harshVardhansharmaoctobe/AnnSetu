@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { ArrowLeft, Ban, Clock, MapPin, Pencil, Phone } from 'lucide-react';
+import { ArrowLeft, Ban, Clock, EyeOff, MapPin, Pencil, Phone, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/confirm-dialog';
@@ -27,7 +27,7 @@ interface DonationDetail {
     notes: string | null; createdAt: string; approvedAt: string | null; pickedUpAt: string | null; deliveredAt: string | null;
     completedAt: string | null; rejectionReason: string | null; disputeReason: string | null;
     ngoProfile: { organisationName: string; address: string; latitude: number; longitude: number; user: Contact };
-    assignments: { id: string; status: string; volunteerProfile: { vehicleType: string | null; user: Contact } }[];
+    assignments: { id: string; status: string; volunteerProfile: { vehicleType: string | null; user: Contact } | null }[];
     proofs: Proof[];
   }[];
 }
@@ -39,6 +39,8 @@ export default function DonorDonationDetail() {
   const { data, error, loading, reload } = useApi<DonationDetail>(`/api/donations/${id}`);
   const [editing, setEditing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const [closing, setClosing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   if (loading && !data) return <LoadingCards count={2} />;
   if (error || !data) return <ErrorState message={error?.message ?? 'Donation not found'} onRetry={reload} />;
@@ -47,7 +49,9 @@ export default function DonorDonationDetail() {
   const unit = d.unit.toLowerCase();
   const activeRequests = d.requests.filter((r) => !['REJECTED', 'CANCELLED'].includes(r.status));
   const canEdit = d.status === 'AVAILABLE' && activeRequests.length === 0;
-  const inTransit = d.requests.some((r) => ['VOLUNTEER_ASSIGNED', 'PICKED_UP', 'DELIVERED'].includes(r.status));
+  const inTransit = d.requests.some((r) => ['VOLUNTEER_ASSIGNED', 'PICKED_UP', 'IN_TRANSIT', 'DELIVERED'].includes(r.status));
+  const canClose = ['AVAILABLE', 'PARTIALLY_RESERVED'].includes(d.status);
+  const canDelete = d.requests.length === 0;
   const canCancel = !['COMPLETED', 'CANCELLED'].includes(d.status) && !inTransit;
 
   async function save(values: DonationFormValues) {
@@ -55,6 +59,28 @@ export default function DonorDonationDetail() {
     toast.success('Donation updated');
     setEditing(false);
     reload();
+  }
+
+  async function closeListing() {
+    try {
+      await api(`/api/donations/${id}/close`, { method: 'POST', body: {} });
+      toast.success('Marked unavailable', 'Approved requests will still be delivered.');
+      reload();
+    } catch (e) {
+      toast.error('Could not update', (e as ApiClientError).message);
+      throw e;
+    }
+  }
+
+  async function remove() {
+    try {
+      await api(`/api/donations/${id}`, { method: 'DELETE' });
+      toast.success('Donation deleted');
+      router.push('/dashboard/donor/donations');
+    } catch (e) {
+      toast.error('Could not delete', (e as ApiClientError).message);
+      throw e;
+    }
   }
 
   async function cancel() {
@@ -89,7 +115,9 @@ export default function DonorDonationDetail() {
           <>
             <StatusBadge status={d.status} className="self-center" />
             {canEdit && <Button variant="outline" onClick={() => setEditing(true)}><Pencil className="mr-2 h-4 w-4" /> Edit</Button>}
-            {canCancel && <Button variant="outline" onClick={() => setCancelling(true)}><Ban className="mr-2 h-4 w-4" /> Cancel donation</Button>}
+            {canClose && <Button variant="outline" onClick={() => setClosing(true)}><EyeOff className="mr-2 h-4 w-4" /> Mark unavailable</Button>}
+            {canCancel && !canDelete && <Button variant="outline" onClick={() => setCancelling(true)}><Ban className="mr-2 h-4 w-4" /> Cancel donation</Button>}
+            {canDelete && <Button variant="outline" onClick={() => setDeleting(true)}><Trash2 className="mr-2 h-4 w-4" /> Delete</Button>}
           </>
         }
       />
@@ -142,7 +170,7 @@ export default function DonorDonationDetail() {
                 />
               );
             }
-            const volunteer = r.assignments.find((a) => !['DECLINED', 'CANCELLED'].includes(a.status));
+            const volunteer = r.assignments.find((a) => a.volunteerProfile && !['REJECTED', 'CANCELLED'].includes(a.status));
             return (
               <div key={r.id} className="space-y-4 rounded-lg border p-4" data-testid="donor-request-tracking">
                 <div className="flex flex-wrap items-start justify-between gap-2">
@@ -157,10 +185,10 @@ export default function DonorDonationDetail() {
                 <RequestProgress request={r} />
                 {volunteer && (
                   <p className="text-sm">
-                    Volunteer: <span className="font-medium">{volunteer.volunteerProfile.user.name}</span>
-                    {volunteer.volunteerProfile.user.phone && (
-                      <a href={`tel:${volunteer.volunteerProfile.user.phone}`} className="ml-2 inline-flex items-center text-green-700 hover:underline">
-                        <Phone className="mr-1 h-3.5 w-3.5" />{volunteer.volunteerProfile.user.phone}
+                    Volunteer: <span className="font-medium">{volunteer.volunteerProfile!.user.name}</span>
+                    {volunteer.volunteerProfile!.user.phone && (
+                      <a href={`tel:${volunteer.volunteerProfile!.user.phone}`} className="ml-2 inline-flex items-center text-green-700 hover:underline">
+                        <Phone className="mr-1 h-3.5 w-3.5" />{volunteer.volunteerProfile!.user.phone}
                       </a>
                     )}
                     <span className="ml-2 text-muted-foreground">({humanize(volunteer.status)})</span>
@@ -185,6 +213,23 @@ export default function DonorDonationDetail() {
         confirmLabel="Cancel donation"
         destructive
         onConfirm={cancel}
+      />
+      <ConfirmDialog
+        open={closing}
+        onOpenChange={setClosing}
+        title="Mark the remaining food unavailable?"
+        description="Pending requests are declined and no new requests are accepted. Requests you already approved are still delivered."
+        confirmLabel="Mark unavailable"
+        onConfirm={closeListing}
+      />
+      <ConfirmDialog
+        open={deleting}
+        onOpenChange={setDeleting}
+        title="Delete this donation?"
+        description="No NGO has requested it yet, so it can be removed completely. This cannot be undone."
+        confirmLabel="Delete donation"
+        destructive
+        onConfirm={remove}
       />
     </div>
   );

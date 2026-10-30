@@ -86,7 +86,7 @@ export const GET = route('donations:list', async (request) => {
       ...common,
       status: { in: OPEN_DONATION_STATUSES },
       safePickupDeadline: deadlineFilter,
-      remainingQuantity: { gt: 0 },
+      remainingQuantity: { gt: 0, ...(query.minQuantity && { gte: query.minQuantity }) },
       donorProfile: { user: { accountStatus: 'APPROVED' } },
     },
     orderBy: query.sort === 'expiry' ? { safePickupDeadline: 'asc' } : { createdAt: 'desc' },

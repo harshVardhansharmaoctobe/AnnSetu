@@ -25,7 +25,7 @@ export const POST = route('register', async (request: NextRequest) => {
     const details = (error as { details?: { fieldErrors?: unknown } }).details;
     return errorResponse(400, (error as Error).message, 'VALIDATION_FAILED', details?.fieldErrors ?? details);
   }
-  const { name, email, password, phone, role } = data;
+  const { name, email, password, phone, role, donorProfile, ngoProfile, volunteerProfile } = data;
 
   const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (existing) return errorResponse(409, 'Email already registered', 'EMAIL_TAKEN');
@@ -39,7 +39,10 @@ export const POST = route('register', async (request: NextRequest) => {
         data: { name, email, password: hashedPassword, phone, role, accountStatus: 'PENDING' },
         select: { id: true, email: true, name: true, role: true, accountStatus: true },
       });
-      if (role === 'VOLUNTEER') await tx.volunteerProfile.create({ data: { userId: created.id } });
+      // The role's own profile (validated by registerSchema to match the role) is created with the account.
+      if (role === 'DONOR' && donorProfile) await tx.donorProfile.create({ data: { ...donorProfile, userId: created.id } });
+      if (role === 'NGO' && ngoProfile) await tx.nGOProfile.create({ data: { ...ngoProfile, userId: created.id } });
+      if (role === 'VOLUNTEER') await tx.volunteerProfile.create({ data: { ...volunteerProfile, userId: created.id } });
 
       await audit(tx, {
         userId: created.id,

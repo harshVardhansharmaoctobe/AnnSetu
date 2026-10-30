@@ -15,14 +15,14 @@ import { api, type ApiClientError } from '@/lib/client';
 import { cn } from '@/lib/utils';
 
 const ROLES = [
-  { value: 'DONOR', label: 'Donor', hint: 'I have surplus food', icon: Building2 },
-  { value: 'NGO', label: 'NGO', hint: 'We distribute food', icon: HandHeart },
-  { value: 'VOLUNTEER', label: 'Volunteer', hint: 'I can deliver food', icon: Truck },
+  { value: 'DONOR', slug: 'donor', label: 'Donor', hint: 'I have surplus food', icon: Building2 },
+  { value: 'NGO', slug: 'ngo', label: 'NGO', hint: 'We distribute food', icon: HandHeart },
+  { value: 'VOLUNTEER', slug: 'volunteer', label: 'Volunteer', hint: 'I can deliver food', icon: Truck },
 ] as const;
 
 export default function RegisterPage() {
   const router = useRouter();
-  const [role, setRole] = useState<(typeof ROLES)[number]['value']>('DONOR');
+  const [role, setRole] = useState<'DONOR' | 'NGO' | 'VOLUNTEER'>('DONOR');
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
@@ -67,10 +67,12 @@ export default function RegisterPage() {
     <div className="min-h-screen gradient-hero">
       <PublicHeader />
       <main className="flex justify-center px-4 py-12">
-        <Card className="w-full max-w-lg">
+        <Card className="w-full max-w-lg shadow-md border-green-100">
           <CardHeader>
-            <CardTitle className="text-2xl">Join FoodBridge</CardTitle>
-            <CardDescription>An admin reviews every account before it can coordinate food.</CardDescription>
+            <CardTitle className="text-2xl font-bold">Join FoodBridge</CardTitle>
+            <CardDescription>
+              Every account is verified by an admin. You will complete your profile on the next step.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <form onSubmit={submit} className="space-y-4" noValidate>
@@ -86,30 +88,41 @@ export default function RegisterPage() {
                       data-testid={`role-${r.value}`}
                       className={cn(
                         'flex flex-col items-center rounded-lg border p-3 text-center text-sm transition',
-                        role === r.value ? 'border-green-600 bg-green-50 text-green-900' : 'hover:bg-muted'
+                        role === r.value ? 'border-green-600 bg-green-50 text-green-900 font-semibold ring-1 ring-green-600' : 'hover:bg-muted'
                       )}
                     >
-                      <r.icon className="h-5 w-5" />
-                      <span className="mt-1 font-semibold">{r.label}</span>
-                      <span className="text-xs text-muted-foreground">{r.hint}</span>
+                      <r.icon className="h-5 w-5 mb-1" />
+                      <span>{r.label}</span>
+                      <span className="text-[11px] text-muted-foreground">{r.hint}</span>
                     </button>
                   ))}
                 </div>
               </fieldset>
-              {field('name', 'Full name', <Input id="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />)}
-              {field('email', 'Email', <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} />)}
-              {field('phone', 'Phone (optional)', <Input id="phone" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} />)}
+              {field('name', 'Full name', <Input id="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} placeholder="e.g. Rahul Sharma" />)}
+              {field('email', 'Email', <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. rahul@example.com" />)}
+              {field('phone', 'Phone (optional)', <Input id="phone" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} placeholder="+91 98765 43210" />)}
               <div className="grid gap-4 sm:grid-cols-2">
-                {field('password', 'Password', <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />)}
-                {field('confirmPassword', 'Confirm password', <Input id="confirmPassword" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />)}
+                {field('password', 'Password', <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" />)}
+                {field('confirmPassword', 'Confirm password', <Input id="confirmPassword" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Repeat password" />)}
               </div>
-              <p className="text-xs text-muted-foreground">At least 8 characters.</p>
+              <p className="text-xs text-muted-foreground">Passwords must be at least 8 characters long.</p>
               {formError && <p className="rounded-md bg-red-50 p-3 text-sm text-red-800" role="alert">{formError}</p>}
-              <Button type="submit" className="w-full" size="lg" disabled={busy}>{busy && <Spinner className="mr-2" />} Create account</Button>
+              <Button type="submit" className="w-full bg-green-600 hover:bg-green-700 text-white" size="lg" disabled={busy}>
+                {busy && <Spinner className="mr-2" />} Create account
+              </Button>
             </form>
-            <p className="mt-6 text-center text-sm text-muted-foreground">
-              Already registered? <Link href="/login" className="font-medium text-green-700 hover:underline">Sign in</Link>
-            </p>
+            <div className="mt-6 flex flex-col gap-2 border-t pt-4 text-center text-sm text-muted-foreground">
+              <p>
+                Looking for role details?{' '}
+                <Link href="/register/donor" className="text-green-700 hover:underline">Donor</Link> ·{' '}
+                <Link href="/register/ngo" className="text-green-700 hover:underline">NGO</Link> ·{' '}
+                <Link href="/register/volunteer" className="text-green-700 hover:underline">Volunteer</Link>
+              </p>
+              <p>
+                Already have an account?{' '}
+                <Link href="/login" className="font-medium text-green-700 hover:underline">Sign in</Link>
+              </p>
+            </div>
           </CardContent>
         </Card>
       </main>

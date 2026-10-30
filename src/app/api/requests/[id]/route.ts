@@ -43,7 +43,7 @@ export const GET = route<{ id: string }>('requests:get', async (_request, { id }
   const isNgo = request.ngoProfile.userId === actor.id;
   const isDonor = request.donation.donorProfile.userId === actor.id;
   const isVolunteer = request.assignments.some(
-    (a) => a.volunteerProfile.userId === actor.id && !['DECLINED', 'CANCELLED'].includes(a.status)
+    (a) => a.volunteerProfile?.userId === actor.id && !['REJECTED', 'CANCELLED'].includes(a.status)
   );
   if (!(actor.role === 'ADMIN' || isNgo || isDonor || isVolunteer)) throw notFound('Request not found');
 
