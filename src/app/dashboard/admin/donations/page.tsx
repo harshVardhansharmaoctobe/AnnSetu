@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
@@ -50,7 +51,7 @@ export default function AdminDonationsPage() {
                   <tbody className="divide-y">
                     {data!.items.map((d) => (
                       <tr key={d.id}>
-                        <td className="p-3"><p className="font-medium">{d.foodName}</p><p className="text-xs text-muted-foreground">{humanize(d.foodCategory)} · {formatDateTime(d.createdAt)}</p></td>
+                        <td className="p-3"><Link href={`/dashboard/admin/donations/${d.id}`} className="font-medium text-green-800 hover:underline">{d.foodName}</Link><p className="text-xs text-muted-foreground">{humanize(d.foodCategory)} · {formatDateTime(d.createdAt)}</p></td>
                         <td className="p-3">{d.donorProfile.organisationName}</td>
                         <td className="p-3">{d.remainingQuantity}/{d.quantity} {d.unit.toLowerCase()}</td>
                         <td className="p-3">{formatDateTime(d.safePickupDeadline)}</td>

@@ -5,10 +5,10 @@
 | Suite | Result |
 |---|---|
 | Unit (Vitest) | 33/33 |
-| Integration (Vitest + HTTP, `foodbridge_test`) | 123/123 – adds `workflow-v2.test.ts` (12): volunteer accept race, arrive → pickup → in transit → deliver, upload ownership/purpose, withdraw reopens a fresh assignment, failed delivery, mark unavailable, delete, password forgot/reset/change with session revocation, analytics |
-| E2E (Playwright, installed Chrome) | 4/4 – the demo flow now runs the exact 50 → 20 → 30 scenario and asserts the database rows (50 listed, 30 remaining, 20 delivered and confirmed, pickup + delivery proof, impact 20) |
+| Integration (Vitest + HTTP, `foodbridge_test`) | 124/124 (pre-demo pass; 123/123 in the sprint) – adds profile-photo ownership and `workflow-v2.test.ts` (12): volunteer accept race, arrive → pickup → in transit → deliver, upload ownership/purpose, withdraw reopens a fresh assignment, failed delivery, mark unavailable, delete, password forgot/reset/change with session revocation, analytics |
+| E2E (Playwright, installed Chrome) | 4/4 – the demo flow runs the exact 50 → 20 → 30 scenario and asserts the database rows (50 listed, 30 remaining, 20 delivered and confirmed, pickup + delivery proof, impact 20); the pre-demo pass adds the landing tagline and featured listing, profile photo upload, admin role totals, users → detail navigation, map layer toggles and the admin donation detail page |
 | tsc · ESLint · `next build` · Prisma validate · schema drift | all clean |
-| Smoke test, four seeded roles on the dev database | 20/20 |
+| Smoke test, four seeded roles on the dev database | 24/24 (pre-demo pass) |
 
 Bugs found and fixed in the sprint: same-second sessions survived a password reset; a race loser's
 response was ambiguous (later briefly over-exposed another volunteer's assignment – corrected, see the

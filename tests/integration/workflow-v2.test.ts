@@ -179,6 +179,22 @@ describe('password reset and change', () => {
   });
 });
 
+describe('profile photos', () => {
+  it('a user can set their own uploaded avatar but not someone else\'s; pending users can upload one', async () => {
+    const pending = await signedIn('NGO', 'PENDING');
+    const own = await pending.client.upload('me.png', PNG_BYTES, 'image/png', 'AVATAR');
+    expect(own.status).toBe(201);
+    expect((await pending.client.put('/api/profile', { avatarUrl: own.data.url })).status).toBe(200);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: pending.user.id } })).avatarUrl).toBe(own.data.url);
+
+    const other = await signedIn('DONOR');
+    const res = await other.client.put('/api/profile', { avatarUrl: own.data.url });
+    expect(res.status).toBe(400);
+    expect(res.data.code).toBe('UPLOAD_NOT_OWNED');
+    expect((await pending.client.put('/api/profile', { avatarUrl: null })).status).toBe(200);
+  });
+});
+
 describe('admin analytics', () => {
   it('returns period reports to admins only', async () => {
     const admin = await signedIn('ADMIN');

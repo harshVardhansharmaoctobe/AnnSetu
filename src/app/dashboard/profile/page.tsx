@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { NativeSelect } from '@/components/ui/native-select';
 import { LocationPicker, type LocationValue } from '@/components/location-picker';
+import { ImageUpload } from '@/components/image-upload';
 import { ErrorState, LoadingCards, PageHeader, Spinner, StatusBadge } from '@/components/states';
 import { useToast } from '@/components/toaster';
 import { api, useApi, type ApiClientError } from '@/lib/client';
@@ -20,6 +21,7 @@ interface Profile {
   name: string;
   email: string;
   phone: string | null;
+  avatarUrl: string | null;
   role: 'DONOR' | 'NGO' | 'VOLUNTEER' | 'ADMIN';
   accountStatus: string;
   donorProfile: { organisationName: string; organisationType: string; address: string; latitude: number; longitude: number; description: string | null } | null;
@@ -42,6 +44,7 @@ export default function ProfilePage() {
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [orgName, setOrgName] = useState('');
   const [orgType, setOrgType] = useState('restaurant');
   const [registrationNumber, setRegistrationNumber] = useState('');
@@ -58,6 +61,7 @@ export default function ProfilePage() {
     if (!data) return;
     setName(data.name);
     setPhone(data.phone ?? '');
+    setAvatarUrl(data.avatarUrl ?? null);
     const p = data.donorProfile ?? data.ngoProfile;
     if (p) {
       setOrgName(p.organisationName);
@@ -89,7 +93,7 @@ export default function ProfilePage() {
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setFormError(null);
-    const body: Record<string, unknown> = { name: name.trim(), phone: phone.trim() || undefined };
+    const body: Record<string, unknown> = { name: name.trim(), phone: phone.trim() || undefined, avatarUrl };
 
     if (role === 'DONOR' || role === 'NGO') {
       if (!hasLocation) {
@@ -162,6 +166,10 @@ export default function ProfilePage() {
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Email</Label>
             <p className="text-sm text-muted-foreground">{data.email}</p>
+          </div>
+          <div className="space-y-1.5 sm:col-span-2">
+            <Label>Profile photo</Label>
+            <ImageUpload value={avatarUrl} onChange={setAvatarUrl} id="avatar-photo" purpose="AVATAR" label="Upload profile photo" />
           </div>
         </CardContent>
       </Card>

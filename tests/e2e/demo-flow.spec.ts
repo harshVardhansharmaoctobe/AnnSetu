@@ -57,8 +57,12 @@ test('full food rescue: registration → approval → donation → request → d
     await register(donor, 'DONOR', people.donor);
     await donor.getByLabel('Organisation / business name').fill(people.donor.org);
     await setLocation(donor, 'Mansarovar, Jaipur, Rajasthan', 26.8505, 75.7646);
+    await donor.getByTestId('avatar-photo').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG });
+    await expect(donor.getByAltText('Uploaded')).toBeVisible();
     await donor.getByRole('button', { name: 'Save profile' }).click();
     await expect(donor.getByText('Profile saved')).toBeVisible();
+    const saved = await testPrisma().user.findUniqueOrThrow({ where: { email: people.donor.email }, select: { avatarUrl: true } });
+    expect(saved.avatarUrl).toMatch(/^\/api\/uploads\//);
 
     await register(ngo, 'NGO', people.ngo);
     await ngo.getByLabel('NGO name').fill(people.ngo.org);
@@ -131,6 +135,11 @@ test('full food rescue: registration → approval → donation → request → d
     await expect(donor.getByText('Request approved')).toBeVisible();
     await donor.goto('/dashboard/donor/donations');
     await expect(donor.getByRole('link', { name: new RegExp(FOOD) })).toContainText('30 of 50 meals unreserved');
+
+    // The public landing page shows the tagline and the listing with what is still available.
+    await donor.goto('/');
+    await expect(donor.getByTestId('tagline')).toHaveText('From Surplus to Served.');
+    await expect(donor.getByTestId('featured-donation').filter({ hasText: FOOD })).toContainText('30 meals available');
   });
 
   await test.step('admin assigns the volunteer', async () => {
@@ -221,6 +230,33 @@ test('full food rescue: registration → approval → donation → request → d
     await expect(panel.locator('p').getByText('Verified deliveries', { exact: true }).locator('..').locator('..')).toContainText('1');
     await expect(panel.getByText('Meals served (est.)').locator('..').locator('..')).toContainText('20');
     await expect(panel.getByTestId('impact-demo')).toContainText('No demo records are included');
+  });
+
+  await test.step('admin command center: role totals, user detail, map layers, donation detail', async () => {
+    await admin.goto('/dashboard/admin');
+    const roles = admin.getByTestId('users-by-role');
+    await expect(roles.getByText('Donors').locator('..').locator('..')).toContainText('1');
+    await expect(roles.getByText('Volunteers').locator('..').locator('..')).toContainText('1');
+
+    const map = admin.getByRole('region', { name: 'Platform locations' });
+    await expect(map.locator(`[title="${people.donor.org}"]`)).toBeVisible();
+    await admin.getByTestId('layer-donors').uncheck();
+    await expect(map.locator(`[title="${people.donor.org}"]`)).toHaveCount(0);
+    await expect(map.locator(`[title="${people.ngo.org}"]`)).toBeVisible();
+
+    await admin.goto('/dashboard/admin/users');
+    await admin.getByRole('link', { name: people.donor.name }).click();
+    await expect(admin.getByRole('heading', { name: people.donor.name })).toBeVisible();
+    await expect(admin.getByText(people.donor.org)).toBeVisible();
+
+    await admin.goto('/dashboard/admin/donations');
+    await admin.getByRole('link', { name: FOOD }).click();
+    const quantities = admin.getByTestId('donation-quantities');
+    await expect(quantities.getByText('Listed').locator('..').locator('..')).toContainText('50 meals');
+    await expect(quantities.getByText('Reserved', { exact: true }).locator('..').locator('..')).toContainText('0 meals');
+    await expect(quantities.getByText('Delivered (verified)').locator('..').locator('..')).toContainText('20 meals');
+    await expect(quantities.getByText('Still available').locator('..').locator('..')).toContainText('30 meals');
+    await expect(admin.getByTestId('admin-donation-request')).toContainText(people.ngo.org);
   });
 
   await test.step('notifications reached the right people', async () => {

@@ -33,6 +33,8 @@ export default function AdminOverview() {
   if (stats.error || !stats.data) return <ErrorState message={stats.error?.message ?? 'Could not load stats'} onRetry={stats.reload} />;
   const s = stats.data;
   const disputes = s.openDisputes;
+  const units = (u: { MEALS: number; KG: number }) =>
+    [u.MEALS ? `${u.MEALS} meals` : null, u.KG ? `${u.KG} kg` : null].filter(Boolean).join(' + ') || '0';
 
   return (
     <div className="space-y-8">
@@ -45,6 +47,33 @@ export default function AdminOverview() {
           <StatCard label="Open reports" value={disputes} hint="Delivery problems to review" icon={AlertTriangle} tone={disputes ? 'rose' : 'slate'} />
         </Link>
       </div>
+
+      <section aria-label="Users by role" data-testid="users-by-role">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Users</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: 'Total users', value: s.users.total, href: '/dashboard/admin/users' },
+            { label: 'Donors', value: s.users.byRole.DONOR ?? 0, href: '/dashboard/admin/users?role=DONOR' },
+            { label: 'NGOs', value: s.users.byRole.NGO ?? 0, href: '/dashboard/admin/users?role=NGO' },
+            { label: 'Volunteers', value: s.users.byRole.VOLUNTEER ?? 0, href: '/dashboard/admin/volunteers' },
+          ].map((c) => (
+            <Link key={c.label} href={c.href} className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+              <StatCard label={c.label} value={c.value} icon={Users} tone="slate" />
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section aria-label="Food and deliveries">
+        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Food and deliveries</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <StatCard label="Total donations" value={s.impact.donations.total} icon={Package} />
+          <StatCard label="Available food" value={units(s.impact.donations.quantityAvailable)} hint="Unreserved, unexpired" icon={Package} tone="blue" />
+          <StatCard label="Reserved food" value={units(s.impact.donations.quantityReserved)} hint="Approved, not yet confirmed" icon={Package} tone="amber" />
+          <StatCard label="Completed deliveries" value={s.impact.deliveries.completed} hint="Confirmed by NGOs" icon={Truck} />
+          <StatCard label="Cancelled requests" value={s.requestsByStatus.CANCELLED ?? 0} icon={AlertTriangle} tone="slate" />
+        </div>
+      </section>
 
       <Card>
         <CardHeader><CardTitle className="text-lg">Platform map</CardTitle></CardHeader>

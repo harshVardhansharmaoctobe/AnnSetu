@@ -1,96 +1,92 @@
 # FoodBridge – Demo Guide
 
-A 10-minute live demo of the complete food rescue lifecycle with four separate user sessions.
+**From Surplus to Served.** A 10–12 minute live demo of the full food-rescue lifecycle with four separate
+user sessions, on real database records. Every step below is executed by the automated E2E test
+(`tests/e2e/demo-flow.spec.ts`), which also checks the final database rows.
 
 FoodBridge is free: donors give food, NGOs never pay for food or delivery, volunteers carry it, and the app
-processes no payments. Everything created by the seeded accounts below is **demo data** and the impact
-dashboard labels it as such.
+processes no payments. Everything created by the seeded accounts is **demo data** and is labelled as such
+(landing page "Demo listing", impact dashboard "Demo data" section).
 
-## 1. One-time setup
+## 1. Start the demo
 
-Prerequisites: Node.js 22, Docker Desktop running.
+Prerequisites: Node.js 22 and Docker Desktop running.
 
 ```bash
 cd ps3.3
-npm install
-cp .env.example .env          # only if you do not have a .env yet – then fill in real values
-docker compose up -d          # PostgreSQL 16 + PostGIS on 127.0.0.1:5432
-npx prisma db push            # create/sync tables (non-destructive on an in-sync database)
-npm run db:seed               # demo accounts + 3 demo donations (idempotent, safe to re-run)
+docker compose up -d       # PostgreSQL 16 + PostGIS on 127.0.0.1:5432 (data volume is kept)
+npm run db:seed            # demo accounts + 3 Jaipur demo donations; refreshes their pickup deadlines
 npm run build
-npm start                     # http://localhost:3000
-npm run health                # → { status: 'ok', database: 'up' }
+npm start                  # http://localhost:3000
+npm run health             # → { status: 'ok', database: 'up' }
 ```
 
-`.env` must contain `DATABASE_URL`, `POSTGRES_PASSWORD`, `NEXTAUTH_URL`, `NEXTAUTH_SECRET`,
-`SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` and `SEED_DEMO_PASSWORD`. Generate secrets with
-`openssl rand -base64 32`. The seed refuses to run in production or without the two seed passwords.
+First-time setup only: `npm install`, copy `.env.example` to `.env` and fill in real values, then
+`npx prisma db push`. Never run `docker compose down -v` – it deletes the database volume.
 
 ## 2. Demo accounts
 
-| Role | Email | Password |
+**Passwords are in `DEMO_CREDENTIALS.local.md` in the project folder** (`ps3.3/DEMO_CREDENTIALS.local.md`).
+`npm run db:seed` writes it from your local `.env`; it is gitignored and never committed. Open it before the demo.
+
+| Role | Email | Starts as |
 |---|---|---|
-| Admin | value of `SEED_ADMIN_EMAIL` (default `admin@foodbridge.local`) | `SEED_ADMIN_PASSWORD` in your `.env` |
-| Donor | `donor@foodbridge.local` – Rajasthani Rasoi (Demo), Mansarovar | `SEED_DEMO_PASSWORD` |
-| NGO | `ngo@foodbridge.local` – Annapurna Foundation (Demo), Malviya Nagar | `SEED_DEMO_PASSWORD` |
-| Volunteer | `volunteer@foodbridge.local` – C-Scheme, bike | `SEED_DEMO_PASSWORD` |
+| Admin | `admin@foodbridge.local` (or `SEED_ADMIN_EMAIL`) | Approved |
+| Donor | `donor@foodbridge.local` – Rajasthani Rasoi (Demo), Mansarovar | Pending |
+| NGO | `ngo@foodbridge.local` – Annapurna Foundation (Demo), Malviya Nagar | Pending |
+| Volunteer | `volunteer@foodbridge.local` – C-Scheme, bike | Pending |
 
-Passwords are never stored in this repository. `npm run db:seed` writes them, from your local `.env`, to
-**`DEMO_CREDENTIALS.local.md`** in the project folder (gitignored – open it before the demo). Donor, NGO and
-volunteer start as **PENDING** so the approval step can be shown (`SEED_DEMO_APPROVED=true` skips it).
-Re-running the seed never changes existing accounts; it only refreshes the deadlines of `[Demo]`
-donations no NGO has requested yet.
+Donor, NGO and volunteer start **PENDING** so the approval step can be shown. Until the donor is approved, the
+landing page shows no listings (only approved donors' food is public) and the demo users see the
+"awaiting approval" page. Re-running the seed never changes existing accounts.
 
-**Tip:** use four browser profiles (or one normal + three private windows) so each role keeps its own session.
+**Tip:** use four browser profiles (or one normal window plus three private windows) – one per role.
 
-## 3. Click-by-click demo
+## 3. Click-by-click demo (the 50 → 20 → 30 scenario)
 
-1. **Landing page** – open `http://localhost:3000`: problem, solution, how it works, live impact (real numbers).
-2. **Admin approves accounts** – sign in as admin → *Admin dashboard* → *Accounts awaiting approval* →
-   **Approve** the donor, NGO and volunteer. (Show *Users* for search/filter and *Audit log* for the entries.)
-3. **Donor lists food** – sign in as the donor → *New donation* → title "Paneer biryani", quantity 40 meals,
-   storage "Hot-held", add a photo, tick the food-safety declaration → **Publish donation**.
-   The pickup location defaults to the donor's profile.
-4. **NGO discovers it on the map** – sign in as the NGO → *Find food* → **Map**: green markers are available
-   donations, the blue marker is the NGO's own address. Click the biryani marker → click its name in the popup.
-   (The list view shows the same donations with real distances, match score and time left.)
-5. **NGO requests** – quantity 30, beneficiaries 60 → **Send request**. The request page shows *Pending*.
-6. **Donor approves** – donor dashboard → *Requests awaiting your decision* → **Approve**
-   (10 meals stay available for other NGOs). The NGO gets a notification.
-7. **Admin assigns a volunteer** – approving the request already opened a delivery for volunteers. Admin →
-   *Requests & deliveries* (*Awaiting volunteer*) → **Assign** → choose Priya Singh (sorted by distance) → **Assign**.
-   *(Alternative: the volunteer accepts it straight from **Available assignments** – first to accept wins.)*
-8. **Volunteer accepts** – sign in as the volunteer: the bell shows "New delivery assigned to you" and the
-   dashboard opens on **My assignments**. Open it → **Accept**. Pickup and drop-off appear on the map with a
-   dashed line and an OpenStreetMap directions link; contact details appear once accepted.
-9. **Pickup** – **I have arrived at pickup** (donor notified) → add a pickup photo → **I have collected the food**.
-10. **In transit and delivery proof** – **Mark in transit** (NGO notified) → upload the delivery photo (required –
-    the button stays disabled without it) → quantity → **Mark as delivered**.
+1. **Landing page** – `http://localhost:3000`: tagline *From Surplus to Served*, how it works, live impact.
+2. **Admin approves accounts** – sign in as admin → *Command center* → *Accounts awaiting approval* → **Approve**
+   the donor, NGO and volunteer. Show *Users* (click a name for the user detail page) and the per-role totals.
+3. **Donor lists 50 portions** – sign in as the donor → *Add food donation* → title, **Quantity 50**, unit Meals,
+   storage, handling instructions, add a photo, tick the food-safety declaration → **Publish donation**.
+   The pickup location comes from the donor profile. The landing page now shows it under *Food available right now*.
+4. **NGO discovers it on the map** – sign in as the NGO → *Map* (or *Discover food* → **Map**): green markers are
+   donations, the blue marker is the NGO. Click the donation marker → click its name in the popup.
+5. **NGO requests 20** – Quantity **20**, people it will feed (e.g. 40) → **Send request** → status *Pending*.
+6. **Donor approves** – donor *Overview* → *Requests awaiting your decision* → **Approve**.
+   *My donations* now shows **30 of 50 meals unreserved**; the landing page shows **30 meals available**.
+   Approval also opens a delivery for volunteers (nearby volunteers get a notification).
+7. **Admin assigns a volunteer** – admin → *Requests & deliveries* (*Awaiting volunteer*) → **Assign** → choose
+   the volunteer (sorted by distance) → **Assign**.
+   *(Alternative: the volunteer accepts it from *Available assignments* – the first volunteer to accept wins.)*
+8. **Volunteer accepts** – sign in as the volunteer: the bell shows *New delivery assigned to you* and the
+   dashboard opens on *My assignments*. Open it → **Accept**. Pickup (green) and drop-off (blue) appear on the map
+   with a dashed line and an *OpenStreetMap directions* link; phone numbers appear once accepted.
+9. **Pickup with proof** – **I have arrived at pickup** (donor notified) → add the pickup photo →
+   **I have collected the food**.
+10. **Delivery with proof** – **Mark in transit** (NGO notified) → add the delivery photo (required – the button stays
+    disabled without it) → quantity **20** → **Mark as delivered**.
 11. **NGO confirms receipt** – NGO → *Active deliveries* (or the request page) → **Confirm receipt** → optional
-    1–5 rating and feedback → confirm → impact recorded. *Report problem* shows the dispute path instead.
-12. **Admin views the completed delivery** – *Deliveries* → *Completed* → open it: full timeline, contacts,
-    pickup and delivery proof photos.
-13. **Impact dashboard** – *Impact*: *Verified platform records* update from the confirmed delivery (food
-    delivered, verified deliveries, completed donations, volunteer deliveries, recovery rate); *Estimated impact*
-    shows meals, kg, CO₂e and water with their assumptions; *Demo data* states how much comes from the demo
-    accounts. Deliveries not yet confirmed are listed separately and not counted. The landing page updates too.
-14. **Reports (optional)** – as the NGO choose *Report problem* instead of confirming; as the admin open
-    *Reports* → **Resolve** → *Delivery verified* (impact recorded for the verified quantity) or *Could not be
-    verified* (no impact). Everyone involved is notified and the decision appears in the audit log.
+    1–5 rating and feedback → confirm → *Impact recorded: ≈ 20 meals*.
+    *(Report problem shows the dispute path; the admin resolves it under *Reported issues*.)*
+12. **Admin verifies** – admin → *Requests & deliveries* → **Completed** → open the delivery: full timeline,
+    pickup proof and delivery proof photos. *Donations* → click the donation: **Listed 50 · Reserved 0 ·
+    Delivered (verified) 20 · Still available 30**. On the *Command center* map, toggle the layers.
+13. **Impact dashboard** – *Impact*: *Verified platform records* show total food listed (50 meals), food delivered
+    (verified) **20 meals**, available now 30; *Estimated impact* shows meals/kg/CO₂e with their assumptions;
+    *Demo data* states how much comes from demo accounts. Only NGO-confirmed deliveries count.
 
-Optional extras: concurrent safety (two NGOs request more than is available; only what remains can be
-approved), notifications bell and *Mark all as read*, suspending a user (they are signed out immediately),
-mobile layout (resize the window or use a phone).
+Optional extras: password reset (*Forgot password?* on the login page; the admin can issue a one-time link from the
+user detail page), *Settings → Change password* (signs out every session), notifications and *Mark all as read*,
+suspending a user (signed out immediately), mobile layout.
 
 ## 4. Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| `npm run health` reports the database down | `docker compose ps` – start Docker Desktop, then `docker compose up -d` |
-| Login says "Too many failed sign-in attempts" | Wait 15 minutes, or restart the server (limits are in memory) |
-| No donations in *Find food* | Demo donations expire; run `npm run db:seed` again, or create a new one as the donor |
+| `npm run health` reports the database down | Start Docker Desktop, then `docker compose up -d` |
+| Landing page shows no listings | The demo donor is still pending – approve it (step 2) |
+| *Discover food* is empty | Demo donations expire after their deadline; run `npm run db:seed` again |
+| "Too many failed sign-in attempts" | Wait 15 minutes, or restart the server (limits are in memory) |
 | Map tiles are grey | No internet access; markers, lists, distances and all actions still work |
-| "Location permission denied" | Click the map or type coordinates instead – nothing else needs location access |
-| Docker/PostgreSQL write errors | Free disk space on the drive holding Docker's data (C: on this machine) |
-
-Never run `docker compose down -v` – it deletes the database volume.
+| Forgot-password link not received | No email service in this MVP: the admin issues a link from the user detail page |

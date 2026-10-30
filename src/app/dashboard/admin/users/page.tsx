@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 import { Search } from 'lucide-react';
@@ -21,7 +22,7 @@ function UsersInner() {
   const params = useSearchParams();
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
-  const [role, setRole] = useState('');
+  const [role, setRole] = useState(params.get('role') ?? '');
   const [status, setStatus] = useState(params.get('status') ?? '');
   const [page, setPage] = useState(1);
   useEffect(() => {
@@ -62,7 +63,7 @@ function UsersInner() {
                       const org = u.donorProfile ?? u.ngoProfile;
                       return (
                         <tr key={u.id} data-testid="user-row">
-                          <td className="p-3"><p className="font-medium">{u.name}</p><p className="text-xs text-muted-foreground">{u.email}{u.phone && ` · ${u.phone}`}</p></td>
+                          <td className="p-3"><Link href={`/dashboard/admin/users/${u.id}`} className="font-medium text-green-800 hover:underline">{u.name}</Link><p className="text-xs text-muted-foreground">{u.email}{u.phone && ` · ${u.phone}`}</p></td>
                           <td className="p-3">{humanize(u.role)}</td>
                           <td className="p-3 text-xs text-muted-foreground">
                             {org ? <>{org.organisationName}<br />{org.address}</> : u.volunteerProfile ? <>{u.volunteerProfile.address ?? 'No service area'}{u.volunteerProfile.vehicleType && ` · ${u.volunteerProfile.vehicleType}`}</> : u.role === 'ADMIN' ? '—' : 'Profile not completed'}
