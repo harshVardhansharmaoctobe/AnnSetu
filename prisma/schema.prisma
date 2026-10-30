@@ -1,0 +1,319 @@
+// FoodBridge – Prisma Schema
+// Zero-Waste Food Rescue Coordination Platform
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [postgis]
+}
+
+// ──────────────────────────────────────────
+// ENUMS
+// ──────────────────────────────────────────
+
+enum UserRole {
+  DONOR
+  NGO
+  VOLUNTEER
+  ADMIN
+}
+
+enum AccountStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+  REJECTED
+}
+
+enum DonationStatus {
+  AVAILABLE
+  PARTIALLY_RESERVED
+  FULLY_RESERVED
+  IN_PROGRESS
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum RequestStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  CANCELLED
+  VOLUNTEER_ASSIGNED
+  PICKED_UP
+  DELIVERED
+  COMPLETED
+  DISPUTED
+}
+
+enum AssignmentStatus {
+  AVAILABLE
+  ASSIGNED
+  ACCEPTED
+  PICKED_UP
+  DELIVERED
+  COMPLETED
+  CANCELLED
+}
+
+enum FoodCategory {
+  COOKED_MEALS
+  RAW_VEGETABLES
+  RAW_FRUITS
+  BAKERY
+  DAIRY
+  BEVERAGES
+  PACKAGED
+  MIXED
+  OTHER
+}
+
+enum FoodType {
+  VEGETARIAN
+  NON_VEGETARIAN
+  VEGAN
+}
+
+enum QuantityUnit {
+  MEALS
+  KG
+}
+
+enum NotificationType {
+  NEW_REQUEST
+  REQUEST_APPROVED
+  REQUEST_REJECTED
+  VOLUNTEER_ASSIGNED
+  VOLUNTEER_ACCEPTED
+  PICKUP_COMPLETED
+  DELIVERY_COMPLETED
+  CONFIRMATION_REQUIRED
+  DISPUTE_RAISED
+  DONATION_DEADLINE_NEAR
+  DONATION_EXPIRED
+  ACCOUNT_APPROVED
+  ACCOUNT_REJECTED
+  GENERAL
+}
+
+// ──────────────────────────────────────────
+// MODELS
+// ──────────────────────────────────────────
+
+model User {
+  id            String        @id @default(cuid())
+  email         String        @unique
+  password      String
+  name          String
+  phone         String?
+  role          UserRole
+  accountStatus AccountStatus @default(PENDING)
+  avatarUrl     String?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  donorProfile     DonorProfile?
+  ngoProfile       NGOProfile?
+  volunteerProfile VolunteerProfile?
+
+  notifications Notification[]
+  auditLogs     AuditLog[]
+
+  @@index([role])
+  @@index([accountStatus])
+}
+
+model DonorProfile {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  organisationName String
+  organisationType String   // restaurant, hotel, hostel, catering, event_organiser, college_mess, other
+  address          String
+  latitude         Float
+  longitude        Float
+  description      String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  donations FoodDonation[]
+}
+
+model NGOProfile {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  organisationName  String
+  address           String
+  latitude          Float
+  longitude         Float
+  description       String?
+  receivingCapacity Int      @default(100) // max meals they can handle
+  foodPreferences   String?  // comma-separated FoodCategory values
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requests FoodRequest[]
+}
+
+model VolunteerProfile {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  address       String?
+  latitude      Float?
+  longitude     Float?
+  vehicleType   String?  // bike, car, bicycle, walking
+  isAvailable   Boolean  @default(true)
+  maxDistance    Float    @default(15) // km
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments VolunteerAssignment[]
+}
+
+model FoodDonation {
+  id                   String         @id @default(cuid())
+  donorProfileId       String
+  foodName             String
+  description          String?
+  foodCategory         FoodCategory
+  foodType             FoodType
+  quantity             Float
+  remainingQuantity    Float
+  unit                 QuantityUnit
+  preparationTime      DateTime
+  storageConditions    String
+  safePickupDeadline   DateTime
+  foodSafetyDeclared   Boolean        @default(false)
+  photoUrl             String?
+  pickupAddress        String
+  latitude             Float
+  longitude            Float
+  status               DonationStatus @default(AVAILABLE)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+
+  donorProfile DonorProfile  @relation(fields: [donorProfileId], references: [id], onDelete: Cascade)
+  requests     FoodRequest[]
+
+  @@index([status])
+  @@index([latitude, longitude])
+  @@index([safePickupDeadline])
+  @@index([foodCategory])
+}
+
+model FoodRequest {
+  id                String        @id @default(cuid())
+  donationId        String
+  ngoProfileId      String
+  requestedQuantity Float
+  deliveredQuantity Float?
+  status            RequestStatus @default(PENDING)
+  notes             String?
+  disputeReason     String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  donation    FoodDonation          @relation(fields: [donationId], references: [id], onDelete: Cascade)
+  ngoProfile  NGOProfile            @relation(fields: [ngoProfileId], references: [id], onDelete: Cascade)
+  assignments VolunteerAssignment[]
+  proofs      DeliveryProof[]
+  impact      ImpactRecord?
+
+  @@index([status])
+  @@index([donationId])
+  @@index([ngoProfileId])
+}
+
+model VolunteerAssignment {
+  id                   String           @id @default(cuid())
+  requestId            String
+  volunteerProfileId   String
+  status               AssignmentStatus @default(AVAILABLE)
+  pickupTime           DateTime?
+  deliveryTime         DateTime?
+  pickupProofUrl       String?
+  deliveryProofUrl     String?
+  notes                String?
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+
+  request          FoodRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  volunteerProfile VolunteerProfile @relation(fields: [volunteerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([requestId])
+  @@index([volunteerProfileId])
+}
+
+model DeliveryProof {
+  id              String   @id @default(cuid())
+  requestId       String
+  type            String   // pickup, delivery
+  photoUrl        String?
+  quantity        Float?
+  notes           String?
+  submittedBy     String   // userId
+  createdAt       DateTime @default(now())
+
+  request FoodRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([requestId])
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  link      String?
+  isRead    Boolean          @default(false)
+  createdAt DateTime         @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([createdAt])
+}
+
+model ImpactRecord {
+  id                 String   @id @default(cuid())
+  requestId          String   @unique
+  donorProfileId     String
+  ngoProfileId       String
+  volunteerProfileId String?
+  mealsRescued       Float
+  weightKg           Float?
+  co2SavedKg         Float?   // estimated: ~2.5kg CO2 per kg food
+  waterSavedLiters   Float?   // estimated: ~1000L per kg food
+  createdAt          DateTime @default(now())
+
+  request FoodRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  @@index([donorProfileId])
+  @@index([ngoProfileId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([entity, entityId])
+  @@index([createdAt])
+}

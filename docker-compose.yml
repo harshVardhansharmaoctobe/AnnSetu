@@ -1,0 +1,26 @@
+# FoodBridge – local development database
+# PostgreSQL 16 + PostGIS (the Prisma schema enables the postgis extension).
+# POSTGRES_PASSWORD is read from .env (gitignored) – never hardcode it here.
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: foodbridge-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_DB: foodbridge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - foodbridge-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d foodbridge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  foodbridge-pgdata:
