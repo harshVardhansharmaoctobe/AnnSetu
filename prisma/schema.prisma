@@ -1,5 +1,12 @@
 // FoodBridge – Prisma Schema
 // Zero-Waste Food Rescue Coordination Platform
+//
+// Lifecycle (see docs/ARCHITECTURE.md):
+//   FoodDonation.status tracks how much food is still unclaimed.
+//   FoodRequest.status tracks one NGO's delivery from request to receipt:
+//     PENDING → ACCEPTED → VOLUNTEER_ASSIGNED → PICKED_UP → DELIVERED → COMPLETED
+//   Every transition is applied with a conditional update on the expected
+//   current status, so invalid or concurrent transitions are rejected.
 
 generator client {
   provider        = "prisma-client-js"
@@ -31,35 +38,38 @@ enum AccountStatus {
 }
 
 enum DonationStatus {
-  AVAILABLE
-  PARTIALLY_RESERVED
-  FULLY_RESERVED
-  IN_PROGRESS
-  COMPLETED
-  EXPIRED
-  CANCELLED
+  AVAILABLE // nothing reserved yet
+  PARTIALLY_RESERVED // some quantity approved for NGOs, some still open
+  FULLY_RESERVED // all quantity approved for NGOs
+  COMPLETED // every approved request has been delivered
+  EXPIRED // pickup deadline passed before it was fully claimed
+  CANCELLED // withdrawn by the donor
 }
 
 enum RequestStatus {
-  PENDING
-  ACCEPTED
-  REJECTED
-  CANCELLED
-  VOLUNTEER_ASSIGNED
-  PICKED_UP
-  DELIVERED
-  COMPLETED
-  DISPUTED
+  PENDING // NGO asked, donor has not decided
+  ACCEPTED // donor approved; quantity reserved; awaiting volunteer
+  REJECTED // donor declined
+  CANCELLED // withdrawn by NGO, or donation cancelled
+  VOLUNTEER_ASSIGNED // a volunteer holds an active assignment
+  PICKED_UP // volunteer collected the food
+  DELIVERED // volunteer delivered with proof
+  COMPLETED // NGO confirmed receipt (impact recorded)
+  DISPUTED // NGO reported a problem on receipt
 }
 
 enum AssignmentStatus {
-  AVAILABLE
-  ASSIGNED
-  ACCEPTED
+  ASSIGNED // admin offered it; volunteer has not answered
+  ACCEPTED // volunteer committed (or self-claimed)
+  DECLINED // volunteer declined an admin assignment
   PICKED_UP
   DELIVERED
-  COMPLETED
   CANCELLED
+}
+
+enum ProofType {
+  PICKUP
+  DELIVERY
 }
 
 enum FoodCategory {
@@ -86,19 +96,23 @@ enum QuantityUnit {
 }
 
 enum NotificationType {
+  REGISTRATION_SUBMITTED
   NEW_REQUEST
   REQUEST_APPROVED
   REQUEST_REJECTED
+  REQUEST_CANCELLED
   VOLUNTEER_ASSIGNED
   VOLUNTEER_ACCEPTED
+  VOLUNTEER_DECLINED
   PICKUP_COMPLETED
   DELIVERY_COMPLETED
-  CONFIRMATION_REQUIRED
+  RECEIPT_CONFIRMED
   DISPUTE_RAISED
-  DONATION_DEADLINE_NEAR
-  DONATION_EXPIRED
+  DONATION_CANCELLED
   ACCOUNT_APPROVED
   ACCOUNT_REJECTED
+  ACCOUNT_SUSPENDED
+  ACCOUNT_REINSTATED
   GENERAL
 }
 
@@ -124,16 +138,18 @@ model User {
 
   notifications Notification[]
   auditLogs     AuditLog[]
+  proofs        DeliveryProof[]
 
   @@index([role])
   @@index([accountStatus])
+  @@index([createdAt])
 }
 
 model DonorProfile {
   id               String   @id @default(cuid())
   userId           String   @unique
   organisationName String
-  organisationType String   // restaurant, hotel, hostel, catering, event_organiser, college_mess, other
+  organisationType String // restaurant, hotel, hostel, catering, event_organiser, college_mess, other
   address          String
   latitude         Float
   longitude        Float
@@ -146,33 +162,35 @@ model DonorProfile {
 }
 
 model NGOProfile {
-  id                String   @id @default(cuid())
-  userId            String   @unique
-  organisationName  String
-  address           String
-  latitude          Float
-  longitude         Float
-  description       String?
-  receivingCapacity Int      @default(100) // max meals they can handle
-  foodPreferences   String?  // comma-separated FoodCategory values
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  organisationName   String
+  registrationNumber String?
+  address            String
+  latitude           Float
+  longitude          Float
+  description        String?
+  receivingCapacity  Int      @default(100) // max meals they can handle per pickup
+  foodPreferences    String? // comma-separated FoodCategory values
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
 
   user     User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   requests FoodRequest[]
 }
 
 model VolunteerProfile {
-  id            String   @id @default(cuid())
-  userId        String   @unique
-  address       String?
-  latitude      Float?
-  longitude     Float?
-  vehicleType   String?  // bike, car, bicycle, walking
-  isAvailable   Boolean  @default(true)
-  maxDistance    Float    @default(15) // km
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  address      String? // service area
+  latitude     Float?
+  longitude    Float?
+  vehicleType  String? // bike, car, bicycle, walking
+  availability String? // free text, e.g. "Weekday evenings"
+  isAvailable  Boolean  @default(true)
+  maxDistance  Float    @default(15) // km
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
   assignments VolunteerAssignment[]
@@ -186,10 +204,12 @@ model FoodDonation {
   foodCategory         FoodCategory
   foodType             FoodType
   quantity             Float
-  remainingQuantity    Float
+  remainingQuantity    Float // unreserved quantity; never negative (guarded by conditional updates)
   unit                 QuantityUnit
   preparationTime      DateTime
   storageConditions    String
+  handlingInstructions String?
+  contactPhone         String?
   safePickupDeadline   DateTime
   foodSafetyDeclared   Boolean        @default(false)
   photoUrl             String?
@@ -203,9 +223,9 @@ model FoodDonation {
   donorProfile DonorProfile  @relation(fields: [donorProfileId], references: [id], onDelete: Cascade)
   requests     FoodRequest[]
 
-  @@index([status])
+  @@index([status, safePickupDeadline])
+  @@index([donorProfileId, createdAt])
   @@index([latitude, longitude])
-  @@index([safePickupDeadline])
   @@index([foodCategory])
 }
 
@@ -215,9 +235,15 @@ model FoodRequest {
   ngoProfileId      String
   requestedQuantity Float
   deliveredQuantity Float?
+  beneficiaryCount  Int?
   status            RequestStatus @default(PENDING)
   notes             String?
+  rejectionReason   String?
   disputeReason     String?
+  approvedAt        DateTime?
+  pickedUpAt        DateTime?
+  deliveredAt       DateTime?
+  completedAt       DateTime?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
@@ -227,43 +253,47 @@ model FoodRequest {
   proofs      DeliveryProof[]
   impact      ImpactRecord?
 
+  // One request per NGO per donation; a cancelled request is reactivated instead of duplicated.
+  @@unique([donationId, ngoProfileId])
   @@index([status])
-  @@index([donationId])
-  @@index([ngoProfileId])
+  @@index([ngoProfileId, createdAt])
 }
 
 model VolunteerAssignment {
-  id                   String           @id @default(cuid())
-  requestId            String
-  volunteerProfileId   String
-  status               AssignmentStatus @default(AVAILABLE)
-  pickupTime           DateTime?
-  deliveryTime         DateTime?
-  pickupProofUrl       String?
-  deliveryProofUrl     String?
-  notes                String?
-  createdAt            DateTime         @default(now())
-  updatedAt            DateTime         @updatedAt
+  id                 String           @id @default(cuid())
+  requestId          String
+  volunteerProfileId String
+  status             AssignmentStatus @default(ASSIGNED)
+  assignedById       String? // admin userId, null when self-claimed
+  acceptedAt         DateTime?
+  pickupTime         DateTime?
+  deliveryTime       DateTime?
+  pickupProofUrl     String?
+  deliveryProofUrl   String?
+  notes              String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
 
   request          FoodRequest      @relation(fields: [requestId], references: [id], onDelete: Cascade)
   volunteerProfile VolunteerProfile @relation(fields: [volunteerProfileId], references: [id], onDelete: Cascade)
 
   @@index([status])
   @@index([requestId])
-  @@index([volunteerProfileId])
+  @@index([volunteerProfileId, status])
 }
 
 model DeliveryProof {
-  id              String   @id @default(cuid())
-  requestId       String
-  type            String   // pickup, delivery
-  photoUrl        String?
-  quantity        Float?
-  notes           String?
-  submittedBy     String   // userId
-  createdAt       DateTime @default(now())
+  id            String    @id @default(cuid())
+  requestId     String
+  type          ProofType
+  photoUrl      String?
+  quantity      Float?
+  notes         String?
+  submittedById String
+  createdAt     DateTime  @default(now())
 
-  request FoodRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  request     FoodRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  submittedBy User        @relation(fields: [submittedById], references: [id], onDelete: Cascade)
 
   @@index([requestId])
 }
@@ -280,8 +310,7 @@ model Notification {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, isRead])
-  @@index([createdAt])
+  @@index([userId, isRead, createdAt])
 }
 
 model ImpactRecord {
@@ -292,14 +321,15 @@ model ImpactRecord {
   volunteerProfileId String?
   mealsRescued       Float
   weightKg           Float?
-  co2SavedKg         Float?   // estimated: ~2.5kg CO2 per kg food
-  waterSavedLiters   Float?   // estimated: ~1000L per kg food
+  co2SavedKg         Float? // estimate, see IMPACT_ESTIMATES in src/lib/matching.ts
+  waterSavedLiters   Float? // estimate, see IMPACT_ESTIMATES in src/lib/matching.ts
   createdAt          DateTime @default(now())
 
   request FoodRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
 
   @@index([donorProfileId])
   @@index([ngoProfileId])
+  @@index([volunteerProfileId])
 }
 
 model AuditLog {

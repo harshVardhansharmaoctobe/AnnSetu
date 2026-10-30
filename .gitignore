@@ -39,9 +39,16 @@ next-env.d.ts
 # prisma
 prisma/migrations/**/migration_lock.toml
 
-# uploads
+# uploads (user images, see src/lib/uploads.ts)
+/uploads/
 public/uploads/*
 !public/uploads/.gitkeep
+
+# test artefacts
+test-results/
+playwright-report/
+/.test-uploads/
+/.pw-tmp/
 
 # old project remnants
 backend/

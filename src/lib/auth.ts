@@ -3,6 +3,7 @@ import CredentialsProvider from 'next-auth/providers/credentials';
 import bcrypt from 'bcryptjs';
 import prisma from '@/lib/db';
 import { loginSchema } from '@/lib/validations';
+import { limiters } from '@/lib/rate-limit';
 
 /**
  * Account status policy
@@ -16,6 +17,7 @@ import { loginSchema } from '@/lib/validations';
 export const AUTH_ERRORS = {
   INVALID_CREDENTIALS: 'Invalid email or password',
   SUSPENDED: 'This account has been suspended. Contact the FoodBridge team.',
+  TOO_MANY_ATTEMPTS: 'Too many failed sign-in attempts. Please wait 15 minutes and try again.',
 } as const;
 
 export const authOptions: NextAuthOptions = {
@@ -33,10 +35,18 @@ export const authOptions: NextAuthOptions = {
         }
         const { email, password } = parsed.data;
 
+        // Lockout is per email: after LOGIN_MAX_FAILURES wrong passwords, even the right one is
+        // refused until the window resets. Successful sign-in clears the counter.
+        if (!limiters.loginFailures.check(email).allowed) {
+          throw new Error(AUTH_ERRORS.TOO_MANY_ATTEMPTS);
+        }
+
         const user = await prisma.user.findUnique({ where: { email } });
         if (!user || !(await bcrypt.compare(password, user.password))) {
+          limiters.loginFailures.hit(email);
           throw new Error(AUTH_ERRORS.INVALID_CREDENTIALS);
         }
+        limiters.loginFailures.reset(email);
 
         // Checked only after the password, so account status is never revealed to someone without it.
         if (user.accountStatus === 'SUSPENDED') {
