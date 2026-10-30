@@ -1,0 +1,20 @@
+{
+  "name": "trustchain",
+  "private": true,
+  "version": "1.0.0",
+  "description": "TrustChain - transparent, milestone-based charity donations on Ethereum",
+  "scripts": {
+    "setup": "npm install && npm --prefix blockchain install && npm --prefix backend install && npm --prefix frontend install",
+    "chain": "npm --prefix blockchain run node",
+    "deploy:local": "npm --prefix blockchain run deploy:local",
+    "deploy:sepolia": "npm --prefix blockchain run deploy:sepolia",
+    "seed:local": "npm --prefix backend run seed:demo -- --with-campaign",
+    "db": "npm --prefix backend run db",
+    "dev": "concurrently -n api,web -c blue,green \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
+    "build": "npm --prefix blockchain run compile && npm --prefix backend run build && npm --prefix frontend run build",
+    "test": "npm --prefix blockchain test && npm --prefix backend test && npm --prefix frontend test"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}

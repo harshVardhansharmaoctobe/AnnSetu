@@ -1,0 +1,19 @@
+node_modules/
+dist/
+build/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+.data/
+uploads/
+# hardhat
+blockchain/artifacts/
+blockchain/cache/
+blockchain/typechain-types/
+blockchain/deployments/localhost.json
+blockchain/deployments/hardhat.json
+# test output
+frontend/test-results/
+frontend/playwright-report/
