@@ -10,12 +10,15 @@
     "lint": "next lint",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
-    "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma migrate reset --force",
     "db:studio": "prisma studio",
     "postinstall": "prisma generate",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "npm run test:unit && npm run build && npm run test:integration && npm run test:e2e",
+    "test:unit": "vitest run --config vitest.config.mts",
+    "test:integration": "vitest run --config vitest.integration.config.mts",
+    "test:e2e": "playwright test",
+    "health": "node -e \"fetch(process.argv[1]).then(r=>r.json()).then(j=>{console.log(j);process.exit(j.status==='ok'?0:1)}).catch(e=>{console.error(e.message);process.exit(1)})\" http://localhost:3000/api/health"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
@@ -45,12 +48,12 @@
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-hook-form": "^7.53.0",
-    "react-leaflet": "^4.2.1",
     "tailwind-merge": "^2.5.2",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^3.23.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/leaflet": "^1.9.12",
     "@types/node": "^22.5.4",
@@ -63,6 +66,7 @@
     "prisma": "^5.19.0",
     "tailwindcss": "^3.4.10",
     "tsx": "^4.19.0",
-    "typescript": "^5.5.4"
+    "typescript": "^5.5.4",
+    "vitest": "^5.0.5"
   }
 }

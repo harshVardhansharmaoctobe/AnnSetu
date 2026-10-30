@@ -1,0 +1,193 @@
+import { readFileSync } from 'fs';
+import { expect, test, type Browser, type Page } from '@playwright/test';
+
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=', 'base64');
+const fixture = () => JSON.parse(readFileSync('test-results/e2e-fixture.json', 'utf8')) as { adminEmail: string; adminPassword: string };
+const run = Date.now().toString(36);
+const PASSWORD = 'DemoPass123!';
+const people = {
+  donor: { name: 'Asha Donor', email: `donor.${run}@fbtest.invalid`, org: `Rasoi ${run}` },
+  ngo: { name: 'Ravi NGO', email: `ngo.${run}@fbtest.invalid`, org: `Annapurna ${run}` },
+  volunteer: { name: `Priya Volunteer ${run}`, email: `vol.${run}@fbtest.invalid` },
+};
+const FOOD = `E2E Veg Biryani ${run}`;
+
+async function newPage(browser: Browser) {
+  const context = await browser.newContext();
+  // Map tiles are external; block them so the test never depends on the internet.
+  await context.route('https://*.tile.openstreetmap.org/**', (route) => route.abort());
+  return context.newPage();
+}
+
+async function login(page: Page, email: string, password: string) {
+  await page.goto('/login');
+  await page.getByLabel('Email').fill(email);
+  await page.getByLabel('Password').fill(password);
+  await page.getByRole('button', { name: 'Sign in' }).click();
+  await page.waitForURL(/\/dashboard\//);
+}
+
+async function register(page: Page, role: 'DONOR' | 'NGO' | 'VOLUNTEER', who: { name: string; email: string }) {
+  await page.goto('/register');
+  await page.getByTestId(`role-${role}`).click();
+  await page.getByLabel('Full name').fill(who.name);
+  await page.getByLabel('Email').fill(who.email);
+  await page.getByLabel('Phone (optional)').fill('+91 90000 12345');
+  await page.getByLabel('Password', { exact: true }).fill(PASSWORD);
+  await page.getByLabel('Confirm password').fill(PASSWORD);
+  await page.getByRole('button', { name: 'Create account' }).click();
+  await page.waitForURL('**/dashboard/profile');
+}
+
+async function setLocation(page: Page, address: string, lat: number, lng: number) {
+  await page.locator('#loc-address').fill(address);
+  await page.getByLabel('Latitude').fill(String(lat));
+  await page.getByLabel('Longitude').fill(String(lng));
+}
+
+test('full food rescue: registration → approval → donation → request → delivery → impact', async ({ browser }) => {
+  const { adminEmail, adminPassword } = fixture();
+  const donor = await newPage(browser);
+  const ngo = await newPage(browser);
+  const volunteer = await newPage(browser);
+  const admin = await newPage(browser);
+
+  await test.step('donor, NGO and volunteer register and complete their profiles', async () => {
+    await register(donor, 'DONOR', people.donor);
+    await donor.getByLabel('Organisation / business name').fill(people.donor.org);
+    await setLocation(donor, 'Mansarovar, Jaipur, Rajasthan', 26.8505, 75.7646);
+    await donor.getByRole('button', { name: 'Save profile' }).click();
+    await expect(donor.getByText('Profile saved')).toBeVisible();
+
+    await register(ngo, 'NGO', people.ngo);
+    await ngo.getByLabel('NGO name').fill(people.ngo.org);
+    await setLocation(ngo, 'Malviya Nagar, Jaipur, Rajasthan', 26.8553, 75.8057);
+    await ngo.getByRole('button', { name: 'Save profile' }).click();
+    await expect(ngo.getByText('Profile saved')).toBeVisible();
+
+    await register(volunteer, 'VOLUNTEER', people.volunteer);
+    await setLocation(volunteer, 'C-Scheme, Jaipur, Rajasthan', 26.9012, 75.7985);
+    await volunteer.getByRole('button', { name: 'Save profile' }).click();
+    await expect(volunteer.getByText('Profile saved')).toBeVisible();
+
+    // Pending accounts are held at the status page and cannot open operational pages.
+    await donor.goto('/dashboard/donor/donations/new');
+    await expect(donor).toHaveURL(/\/dashboard\/pending/);
+    await expect(donor.getByTestId('account-status-heading')).toHaveText('Your account is awaiting approval');
+  });
+
+  await test.step('admin approves the three accounts', async () => {
+    await login(admin, adminEmail, adminPassword);
+    await expect(admin).toHaveURL(/\/dashboard\/admin/);
+    for (const who of [people.donor, people.ngo, people.volunteer]) {
+      const row = admin.getByTestId('pending-user').filter({ hasText: who.email });
+      await row.getByRole('button', { name: 'Approve' }).click();
+      await expect(row).toHaveCount(0);
+    }
+  });
+
+  await test.step('donor creates a donation with a photo', async () => {
+    await donor.goto('/dashboard');
+    await expect(donor).toHaveURL(/\/dashboard\/donor$/);
+    await donor.goto('/dashboard/donor/donations/new');
+    await donor.getByLabel('Food title').fill(FOOD);
+    await donor.getByLabel('Quantity').fill('20');
+    await donor.getByLabel('Storage conditions').fill('Hot-held in sealed trays');
+    await donor.getByLabel('Special handling instructions').fill('Keep upright');
+    await donor.getByTestId('donation-photo').setInputFiles({ name: 'biryani.png', mimeType: 'image/png', buffer: PNG });
+    await expect(donor.getByAltText('Uploaded')).toBeVisible();
+    await donor.locator('#foodSafetyDeclared').check();
+    await donor.getByRole('button', { name: 'Publish donation' }).click();
+    await donor.waitForURL(/\/dashboard\/donor\/donations\/(?!new)[^/]+$/);
+    await expect(donor.getByRole('heading', { name: FOOD })).toBeVisible();
+  });
+
+  await test.step('NGO discovers the donation and requests it', async () => {
+    await ngo.goto('/dashboard');
+    await expect(ngo).toHaveURL(/\/dashboard\/ngo$/);
+    await ngo.goto('/dashboard/ngo/browse');
+    const card = ngo.getByTestId('donation-card').filter({ hasText: FOOD });
+    await expect(card).toContainText('km away'); // real distance from the NGO profile location
+    await card.click();
+    await ngo.locator('#requestedQuantity').fill('20');
+    await ngo.locator('#beneficiaryCount').fill('40');
+    await ngo.getByRole('button', { name: 'Send request' }).click();
+    await ngo.waitForURL(/\/dashboard\/ngo\/requests\/[^/]+$/);
+    await expect(ngo.getByText('Pending').first()).toBeVisible();
+  });
+
+  await test.step('donor approves the request', async () => {
+    await donor.goto('/dashboard/donor');
+    const request = donor.getByTestId('donor-request').filter({ hasText: people.ngo.org });
+    await request.getByRole('button', { name: 'Approve' }).click();
+    await expect(donor.getByText('Request approved')).toBeVisible();
+  });
+
+  await test.step('admin assigns the volunteer', async () => {
+    await admin.goto('/dashboard/admin/deliveries');
+    const row = admin.getByTestId('delivery-row').filter({ hasText: FOOD });
+    await row.getByRole('button', { name: 'Assign' }).click();
+    const option = admin.getByTestId('volunteer-option').filter({ hasText: people.volunteer.name });
+    await option.getByRole('button', { name: 'Assign' }).click();
+    await expect(admin.getByText('Volunteer assigned')).toBeVisible();
+  });
+
+  await test.step('volunteer accepts, picks up and delivers with proof', async () => {
+    await volunteer.goto('/dashboard');
+    await expect(volunteer).toHaveURL(/\/dashboard\/volunteer$/);
+    await volunteer.getByTestId('assignment-card').filter({ hasText: FOOD }).click();
+    await volunteer.getByRole('button', { name: 'Accept' }).click();
+    await expect(volunteer.getByText('Assignment accepted')).toBeVisible();
+    await volunteer.getByRole('button', { name: 'I have picked up the food' }).click();
+    await expect(volunteer.getByText('Pickup confirmed')).toBeVisible();
+
+    await expect(volunteer.getByRole('button', { name: 'Mark as delivered' })).toBeDisabled(); // proof required
+    await volunteer.getByTestId('delivery-photo').setInputFiles({ name: 'handover.png', mimeType: 'image/png', buffer: PNG });
+    await expect(volunteer.getByAltText('Uploaded')).toBeVisible();
+    await volunteer.locator('#deliveredQuantity').fill('20');
+    await volunteer.getByRole('button', { name: 'Mark as delivered' }).click();
+    await expect(volunteer.getByText('Delivery completed – the NGO will confirm receipt')).toBeVisible();
+  });
+
+  await test.step('NGO confirms receipt and impact is recorded', async () => {
+    await ngo.reload();
+    await ngo.getByRole('button', { name: 'Confirm receipt' }).click();
+    await ngo.getByRole('dialog').getByRole('button', { name: 'Confirm receipt' }).click();
+    await expect(ngo.getByText('Impact recorded: ≈ 20 meals')).toBeVisible();
+  });
+
+  await test.step('admin sees the completed delivery and live impact numbers', async () => {
+    await admin.goto('/dashboard/admin/deliveries');
+    await admin.getByRole('button', { name: 'Completed' }).click();
+    const row = admin.getByTestId('delivery-row').filter({ hasText: FOOD });
+    await expect(row).toContainText('Completed');
+    await row.getByRole('link', { name: FOOD }).click();
+    await expect(admin.getByText('Delivery proof')).toBeVisible();
+
+    await admin.goto('/dashboard/impact');
+    const panel = admin.getByTestId('impact-panel');
+    await expect(panel.getByText('Meals served (est.)').locator('..').locator('..')).toContainText('20');
+    await expect(panel.getByText('Completed deliveries').locator('..').locator('..')).toContainText('1');
+  });
+
+  await test.step('notifications reached the right people', async () => {
+    await donor.goto('/dashboard/notifications');
+    await expect(donor.getByTestId('notification').filter({ hasText: 'Food received' })).toBeVisible();
+    await donor.getByRole('button', { name: 'Mark all as read' }).click();
+    await expect(donor.getByTestId('unread-badge')).toHaveCount(0);
+  });
+
+  await test.step('logout ends the session', async () => {
+    await donor.getByRole('button', { name: 'Sign out' }).click();
+    await donor.waitForURL((url) => url.pathname === '/');
+    await donor.goto('/dashboard');
+    await expect(donor).toHaveURL(/\/login/);
+  });
+});
+
+test('role pages are protected for the wrong role', async ({ browser }) => {
+  const page = await newPage(browser);
+  await login(page, fixture().adminEmail, fixture().adminPassword);
+  await page.goto('/dashboard/donor');
+  await expect(page).toHaveURL(/\/dashboard\/admin$/); // admin is redirected to its own dashboard
+});
