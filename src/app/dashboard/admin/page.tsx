@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { AlertTriangle, Package, Truck, UserCheck, Users } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ImpactPanel, type ImpactData } from '@/components/impact-panel';
+import { AdminMap } from '@/components/admin-map';
 import { UserActions } from '@/components/user-actions';
 import { EmptyState, ErrorState, LoadingCards, PageHeader, StatCard, StatusBadge, humanize } from '@/components/states';
 import { useApi, type ListResult } from '@/lib/client';
@@ -15,6 +16,7 @@ interface AdminStats {
   requestsByStatus: Record<string, number>;
   activeAssignments: number;
   awaitingVolunteer: number;
+  openDisputes: number;
   impact: ImpactData;
 }
 interface PendingUser {
@@ -30,7 +32,7 @@ export default function AdminOverview() {
   if (stats.loading && !stats.data) return <LoadingCards count={4} />;
   if (stats.error || !stats.data) return <ErrorState message={stats.error?.message ?? 'Could not load stats'} onRetry={stats.reload} />;
   const s = stats.data;
-  const disputes = s.requestsByStatus.DISPUTED ?? 0;
+  const disputes = s.openDisputes;
 
   return (
     <div className="space-y-8">
@@ -39,8 +41,15 @@ export default function AdminOverview() {
         <StatCard label="Pending approvals" value={s.users.pending} hint={`${s.users.total} accounts in total`} icon={UserCheck} tone="amber" />
         <StatCard label="Awaiting a volunteer" value={s.awaitingVolunteer} hint="Approved requests" icon={Truck} tone="rose" />
         <StatCard label="Deliveries in progress" value={s.activeAssignments} icon={Package} tone="blue" />
-        <StatCard label="Open disputes" value={disputes} icon={AlertTriangle} tone={disputes ? 'rose' : 'slate'} />
+        <Link href="/dashboard/admin/reports" className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <StatCard label="Open reports" value={disputes} hint="Delivery problems to review" icon={AlertTriangle} tone={disputes ? 'rose' : 'slate'} />
+        </Link>
       </div>
+
+      <Card>
+        <CardHeader><CardTitle className="text-lg">Platform map</CardTitle></CardHeader>
+        <CardContent><AdminMap /></CardContent>
+      </Card>
 
       <Card>
         <CardHeader className="flex-row items-center justify-between space-y-0">

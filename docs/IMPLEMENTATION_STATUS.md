@@ -9,7 +9,10 @@ Legend: ✅ verified · ⚠️ done with a documented limitation · ⏳ deferred
 |---|---|
 | `fd4f357` | `trustchain-backup` – original TrustChain project (never modified) |
 | `e7216b1` | Foundation: Next 15, Prisma/PostgreSQL, hardened auth |
-| (next commits) | Core workflow + APIs + security · UI · tests, seed and docs – see `git log` |
+| `5b1c210` | Core workflow, APIs and security |
+| `6a08a86` | User interface for all four roles |
+| `6c4d297` | Tests, demo seed and documentation |
+| (next) | Final business rules: dispute resolution, verified-only impact, demo share, maps |
 
 ## Definition of done
 | Item | Status |
@@ -26,13 +29,16 @@ Legend: ✅ verified · ⚠️ done with a documented limitation · ⏳ deferred
 | Pickup workflow | ✅ |
 | Delivery proof upload (required) and delivery completion | ✅ |
 | NGO receipt confirmation or dispute | ✅ |
+| Admin reports: resolve disputes (verify → impact, or close → no impact) | ✅ |
 | Notifications (per event, unread badge, mark one/all read) | ✅ |
-| Impact dashboard from real records, estimates labelled with formulas | ✅ |
-| Location/discovery (Haversine distance, nearest sort, radius, Leaflet map, list fallback) | ✅ |
+| Impact dashboard: verified-only records, labelled estimates, separate demo-data share, recovery rate | ✅ |
+| Maps: NGO discovery, donor detail, volunteer and admin delivery views, admin platform map; invalid coordinates skipped | ✅ |
+| Location/discovery (Haversine distance, nearest sort, radius, list fallback) | ✅ |
+| Free model: no payments or fees; stated on the landing page | ✅ |
 | All critical APIs protected (401/403/404 verified for every role) | ✅ |
 | Database constraints and transactions (race tests pass) | ✅ |
 | No critical/high application security issue left unexplained | ✅ (dependency findings explained in TESTING_REPORT.md) |
-| Automated tests pass (143/143) | ✅ |
+| Automated tests pass (148/148) | ✅ |
 | Production build passes | ✅ |
 | Docker database healthy | ✅ |
 | Demo seed works safely (idempotent, env passwords, refuses production) | ✅ |
@@ -53,7 +59,8 @@ Legend: ✅ verified · ⚠️ done with a documented limitation · ⏳ deferred
 
 ## Deferred (not required for the MVP)
 - ⏳ Password reset / email verification.
-- ⏳ Admin-side editing of donations and manual dispute resolution actions (disputes are visible and notified).
+- ⏳ Admin-side editing of donations.
+- ⏳ Logistics sponsorship (donor/CSR/platform-funded) – not simulated; no funding data exists in the app.
 - ⏳ Profile avatars (the `avatarUrl` column exists but is unused).
 
 ## Decisions log
@@ -62,7 +69,8 @@ Legend: ✅ verified · ⚠️ done with a documented limitation · ⏳ deferred
 - **Concurrency.** Conditional `updateMany` on the expected status (and `remainingQuantity >= n`) inside
   transactions; zero rows means conflict (409).
 - **DeliveryStatus.** Represented by `AssignmentStatus` + `RequestStatus`; no separate enum.
-- **Impact** is recorded only when the receiving NGO confirms receipt.
+- **Impact** is recorded only when the receiving NGO confirms receipt, or an admin verifies a reported problem.
+- **Demo data** is identified by `User.isDemo` (set by the seed; the seed labels its own earlier accounts).
 - **Schema push.** `db push --accept-data-loss` was used once on the dev DB after verifying every application
   table had 0 rows (only enum values, indexes and two empty columns were replaced). The test DB
   (`foodbridge_test`) is recreated freely by the test harness behind a `_test` name guard.

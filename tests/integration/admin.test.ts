@@ -68,6 +68,20 @@ describe('admin account management', () => {
     expect((await admin.client.get('/api/admin/users?pageSize=500')).status).toBe(400); // bounded page size
   });
 
+  it('platform map returns stored locations of approved participants only', async () => {
+    const admin = await signedIn('ADMIN');
+    const flow = await workflow('assigned');
+    const pendingNgo = await createUser('NGO', 'PENDING');
+    const res = await admin.client.get('/api/admin/map');
+    expect(res.status).toBe(200);
+    expect(res.data.ngos.some((n: { id: string }) => n.id === flow.ngo.user.profileId)).toBe(true);
+    expect(res.data.ngos.some((n: { id: string }) => n.id === pendingNgo.profileId)).toBe(false);
+    expect(res.data.deliveries.some((d: { id: string }) => d.id === flow.request.id)).toBe(true);
+    for (const p of [...res.data.donors, ...res.data.ngos]) expect(typeof p.latitude).toBe('number');
+    expect(JSON.stringify(res.data)).not.toMatch(/email|password|phone/i);
+    expect((await flow.ngo.client.get('/api/admin/map')).status).toBe(403);
+  });
+
   it('provides stats and a searchable audit log', async () => {
     const admin = await signedIn('ADMIN');
     const stats = await admin.client.get('/api/admin/stats');

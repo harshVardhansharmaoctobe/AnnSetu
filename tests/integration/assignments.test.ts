@@ -111,6 +111,48 @@ describe('volunteer assignments', () => {
     expect(await prisma.notification.count({ where: { userId: admin.user.id, type: 'DISPUTE_RAISED' } })).toBeGreaterThan(0);
   });
 
+  it('admin verifies a reported problem: delivery completes and impact is recorded for the verified quantity', async () => {
+    const admin = await signedIn('ADMIN');
+    const flow = await workflow('delivered', { quantity: 10 });
+    await flow.ngo.client.post(`/api/requests/${flow.request.id}/confirm`, { outcome: 'DISPUTED', disputeReason: 'Two trays were missing' });
+
+    expect((await flow.ngo.client.post(`/api/requests/${flow.request.id}/resolve`, { outcome: 'VERIFY', note: 'Checked photos' })).status).toBe(403);
+    expect((await admin.client.post(`/api/requests/${flow.request.id}/resolve`, { outcome: 'VERIFY', note: 'x' })).status).toBe(400); // note too short
+    expect((await admin.client.post(`/api/requests/${flow.request.id}/resolve`, { outcome: 'VERIFY', note: 'Checked the photos', verifiedQuantity: 11 })).status).toBe(400);
+
+    const res = await admin.client.post(`/api/requests/${flow.request.id}/resolve`, { outcome: 'VERIFY', note: 'Photos show 8 meals handed over', verifiedQuantity: 8 });
+    expect(res.status).toBe(200);
+    expect(res.data).toMatchObject({ status: 'COMPLETED', deliveredQuantity: 8, disputeResolution: 'Photos show 8 meals handed over' });
+    expect(res.data.disputeResolvedAt).not.toBeNull();
+    expect(await prisma.impactRecord.findUniqueOrThrow({ where: { requestId: flow.request.id } })).toMatchObject({ mealsRescued: 8 });
+    for (const userId of [flow.ngo.user.id, flow.donor.user.id, flow.volunteer!.user.id]) {
+      expect(await prisma.notification.count({ where: { userId, type: 'DISPUTE_RESOLVED' } })).toBe(1);
+    }
+    expect(await prisma.auditLog.count({ where: { entityId: flow.request.id, action: 'DISPUTE_VERIFIED', userId: admin.user.id } })).toBe(1);
+    expect((await admin.client.post(`/api/requests/${flow.request.id}/resolve`, { outcome: 'CLOSE', note: 'Second decision' })).status).toBe(409);
+  });
+
+  it('admin closes an unverifiable report: no impact, and it cannot be resolved twice', async () => {
+    const admin = await signedIn('ADMIN');
+    const flow = await workflow('delivered');
+    await flow.ngo.client.post(`/api/requests/${flow.request.id}/confirm`, { outcome: 'DISPUTED', disputeReason: 'Food arrived spoiled' });
+    const res = await admin.client.post(`/api/requests/${flow.request.id}/resolve`, { outcome: 'CLOSE', note: 'Could not verify condition' });
+    expect(res.status).toBe(200);
+    expect(res.data.status).toBe('DISPUTED');
+    expect(res.data.disputeResolvedAt).not.toBeNull();
+    expect(await prisma.impactRecord.count({ where: { requestId: flow.request.id } })).toBe(0);
+    expect((await admin.client.post(`/api/requests/${flow.request.id}/resolve`, { outcome: 'VERIFY', note: 'Changed my mind' })).status).toBe(409);
+    const open = (await admin.client.get('/api/admin/stats')).data.openDisputes;
+    const list = (await admin.client.get('/api/requests?status=DISPUTED&pageSize=50')).data.items;
+    expect(list.filter((r: { disputeResolvedAt: string | null }) => !r.disputeResolvedAt)).toHaveLength(open);
+  });
+
+  it('only open disputes can be resolved', async () => {
+    const admin = await signedIn('ADMIN');
+    const flow = await workflow('delivered');
+    expect((await admin.client.post(`/api/requests/${flow.request.id}/resolve`, { outcome: 'VERIFY', note: 'No dispute here' })).status).toBe(409);
+  });
+
   it('admin can remove a volunteer before pickup; the volunteer cannot continue', async () => {
     const flow = await workflow('assigned');
     const admin = await signedIn('ADMIN');

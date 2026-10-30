@@ -149,6 +149,12 @@ export const confirmReceiptSchema = z.discriminatedUnion('outcome', [
   }).strict(),
 ]);
 
+export const disputeResolutionSchema = z.object({
+  outcome: z.enum(['VERIFY', 'CLOSE']),
+  note: z.string().trim().min(5, 'Explain the decision (at least 5 characters)').max(500),
+  verifiedQuantity: z.number().positive().max(100_000).optional(),
+}).strict();
+
 // ─── Assignment Schemas ───
 export const assignmentCreateSchema = z.object({
   requestId: z.string().min(1).max(40),

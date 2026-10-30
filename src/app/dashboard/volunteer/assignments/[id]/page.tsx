@@ -134,7 +134,12 @@ export default function AssignmentPage() {
           </CardContent>
         </Card>
       </div>
-      <MapView markers={markers} className="h-64" />
+      <MapView
+        markers={markers}
+        className="h-64"
+        label="Pickup and drop-off map"
+        legend={[{ tone: 'green', label: 'Pickup (donor)' }, { tone: 'blue', label: 'Drop-off (NGO)' }]}
+      />
 
       {a.isMine && a.status === 'ACCEPTED' && (
         <Card>

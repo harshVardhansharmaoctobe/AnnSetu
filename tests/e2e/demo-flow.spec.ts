@@ -102,13 +102,20 @@ test('full food rescue: registration → approval → donation → request → d
     await expect(donor.getByRole('heading', { name: FOOD })).toBeVisible();
   });
 
-  await test.step('NGO discovers the donation and requests it', async () => {
+  await test.step('NGO discovers the donation on the map and requests it', async () => {
     await ngo.goto('/dashboard');
     await expect(ngo).toHaveURL(/\/dashboard\/ngo$/);
     await ngo.goto('/dashboard/ngo/browse');
     const card = ngo.getByTestId('donation-card').filter({ hasText: FOOD });
     await expect(card).toContainText('km away'); // real distance from the NGO profile location
-    await card.click();
+
+    await ngo.getByRole('button', { name: 'Map' }).click();
+    const map = ngo.getByRole('region', { name: 'Map of available donations' });
+    await expect(map.locator('[title="Your NGO"]')).toBeVisible(); // the NGO's own saved location
+    await map.locator(`[title="${FOOD}"]`).click();                // the donation's pickup marker
+    await map.getByRole('link', { name: FOOD }).click();            // popup link
+    await ngo.waitForURL(/\/dashboard\/ngo\/donations\/[^/]+$/);
+    await expect(ngo.getByRole('heading', { name: FOOD })).toBeVisible();
     await ngo.locator('#requestedQuantity').fill('20');
     await ngo.locator('#beneficiaryCount').fill('40');
     await ngo.getByRole('button', { name: 'Send request' }).click();
@@ -166,8 +173,10 @@ test('full food rescue: registration → approval → donation → request → d
 
     await admin.goto('/dashboard/impact');
     const panel = admin.getByTestId('impact-panel');
+    await expect(panel.getByText('Food delivered (verified)').locator('..').locator('..')).toContainText('20 meals');
+    await expect(panel.getByText('Verified deliveries', { exact: true }).locator('..').locator('..')).toContainText('1');
     await expect(panel.getByText('Meals served (est.)').locator('..').locator('..')).toContainText('20');
-    await expect(panel.getByText('Completed deliveries').locator('..').locator('..')).toContainText('1');
+    await expect(panel.getByTestId('impact-demo')).toContainText('No demo records are included');
   });
 
   await test.step('notifications reached the right people', async () => {

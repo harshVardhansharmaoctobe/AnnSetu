@@ -486,6 +486,85 @@ export async function confirmReceipt(
   });
 }
 
+/**
+ * Admin resolves a delivery the NGO reported a problem with.
+ *   VERIFY – the admin confirmed the food was delivered: request → COMPLETED and impact is recorded
+ *            for the verified quantity (defaults to what the volunteer reported).
+ *   CLOSE  – the delivery could not be verified: request stays DISPUTED, marked resolved, no impact.
+ */
+export async function resolveDispute(
+  actor: Actor,
+  requestId: string,
+  input: { outcome: 'VERIFY' | 'CLOSE'; note: string; verifiedQuantity?: number }
+) {
+  if (actor.role !== 'ADMIN') throw forbidden();
+  return transaction(async (tx) => {
+    const request = await tx.foodRequest.findUnique({ where: { id: requestId }, include: requestWithParties });
+    if (!request) throw notFound('Request not found');
+    if (request.status !== 'DISPUTED' || request.disputeResolvedAt) {
+      throw invalidTransition('Only open disputes can be resolved');
+    }
+    const now = new Date();
+    const assignment = await tx.volunteerAssignment.findFirst({
+      where: { requestId, status: 'DELIVERED' },
+      include: { volunteerProfile: { select: { id: true, userId: true } } },
+    });
+
+    if (input.outcome === 'VERIFY') {
+      const quantity = input.verifiedQuantity ?? request.deliveredQuantity ?? request.requestedQuantity;
+      if (quantity > request.requestedQuantity) {
+        throw badRequest(`Verified quantity cannot exceed the approved ${request.requestedQuantity}`, 'QUANTITY_EXCEEDS_APPROVED');
+      }
+      const moved = await tx.foodRequest.updateMany({
+        where: { id: requestId, status: 'DISPUTED', disputeResolvedAt: null },
+        data: {
+          status: 'COMPLETED', completedAt: now, deliveredQuantity: quantity,
+          disputeResolution: input.note, disputeResolvedAt: now,
+        },
+      });
+      if (moved.count === 0) throw conflict('The dispute changed; reload and try again');
+      await tx.impactRecord.create({
+        data: {
+          requestId,
+          donorProfileId: request.donation.donorProfileId,
+          ngoProfileId: request.ngoProfileId,
+          volunteerProfileId: assignment?.volunteerProfile.id,
+          ...calculateImpact(quantity, request.donation.unit),
+        },
+      });
+    } else {
+      const moved = await tx.foodRequest.updateMany({
+        where: { id: requestId, status: 'DISPUTED', disputeResolvedAt: null },
+        data: { disputeResolution: input.note, disputeResolvedAt: now },
+      });
+      if (moved.count === 0) throw conflict('The dispute changed; reload and try again');
+    }
+    await refreshDonationStatus(tx, request.donationId);
+
+    const verdict = input.outcome === 'VERIFY'
+      ? 'The delivery was verified and its impact recorded.'
+      : 'The delivery could not be verified; no impact was recorded.';
+    await notify(tx, [
+      { userId: request.ngoProfile.userId, link: ngoLink(requestId) },
+      { userId: request.donation.donorProfile.userId, link: donorLink(request.donationId) },
+      ...(assignment ? [{ userId: assignment.volunteerProfile.userId, link: volunteerLink(assignment.id) }] : []),
+    ].map((n) => ({
+      ...n,
+      type: 'DISPUTE_RESOLVED' as const,
+      title: 'Reported problem resolved',
+      message: `"${request.donation.foodName}": ${verdict} Admin note: ${input.note}`,
+    })));
+    await audit(tx, {
+      userId: actor.id,
+      action: input.outcome === 'VERIFY' ? 'DISPUTE_VERIFIED' : 'DISPUTE_CLOSED',
+      entity: 'FoodRequest',
+      entityId: requestId,
+      details: input.note,
+    });
+    return tx.foodRequest.findUniqueOrThrow({ where: { id: requestId } });
+  });
+}
+
 // ─── Assignments ───
 
 export async function createAssignment(actor: Actor, input: { requestId: string; volunteerProfileId?: string }) {

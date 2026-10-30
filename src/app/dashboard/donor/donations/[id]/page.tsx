@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from '@/components/confirm-dialog';
 import { DonationForm, type DonationFormValues } from '@/components/donation-form';
 import { DonorRequestCard } from '@/components/donor-request-card';
+import { MapView } from '@/components/map-view';
 import { ProofList, RequestProgress, type Proof } from '@/components/request-progress';
 import { EmptyState, ErrorState, LoadingCards, PageHeader, StatusBadge, humanize } from '@/components/states';
 import { useToast } from '@/components/toaster';
@@ -25,7 +26,7 @@ interface DonationDetail {
     id: string; status: string; requestedQuantity: number; deliveredQuantity: number | null; beneficiaryCount: number | null;
     notes: string | null; createdAt: string; approvedAt: string | null; pickedUpAt: string | null; deliveredAt: string | null;
     completedAt: string | null; rejectionReason: string | null; disputeReason: string | null;
-    ngoProfile: { organisationName: string; address: string; user: Contact };
+    ngoProfile: { organisationName: string; address: string; latitude: number; longitude: number; user: Contact };
     assignments: { id: string; status: string; volunteerProfile: { vehicleType: string | null; user: Contact } }[];
     proofs: Proof[];
   }[];
@@ -110,6 +111,21 @@ export default function DonorDonationDetail() {
           )}
         </CardContent>
       </Card>
+
+      <MapView
+        className="h-64"
+        label="Pickup and requesting NGOs"
+        markers={[
+          { id: 'pickup', lat: d.latitude, lng: d.longitude, title: 'Pickup point', subtitle: d.pickupAddress, tone: 'green' },
+          ...d.requests
+            .filter((r) => !['REJECTED', 'CANCELLED'].includes(r.status))
+            .map((r) => ({
+              id: r.id, lat: r.ngoProfile.latitude, lng: r.ngoProfile.longitude, title: r.ngoProfile.organisationName,
+              subtitle: `${r.requestedQuantity} ${unit} · ${humanize(r.status)}`, tone: 'blue' as const,
+            })),
+        ]}
+        legend={[{ tone: 'green', label: 'Pickup point' }, { tone: 'blue', label: 'Requesting NGO' }]}
+      />
 
       <Card>
         <CardHeader><CardTitle className="text-lg">NGO requests ({d.requests.length})</CardTitle></CardHeader>

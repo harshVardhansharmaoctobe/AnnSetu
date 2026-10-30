@@ -38,13 +38,19 @@ async function ensureUser(
   passwordHash: string,
   profile?: (userId: string) => Promise<unknown>
 ) {
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true, role: true, accountStatus: true } });
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true, role: true, accountStatus: true, isDemo: true } });
   if (existing) {
     if (existing.role !== data.role) fail(`${email} already exists with role ${existing.role}; refusing to change it`);
-    console.log(`  • ${email.padEnd(32)} exists (${existing.accountStatus}) – left unchanged`);
+    if (!existing.isDemo) {
+      // Accounts created by an earlier version of this seed predate the isDemo flag; label them only.
+      await prisma.user.update({ where: { id: existing.id }, data: { isDemo: true } });
+      console.log(`  • ${email.padEnd(32)} exists (${existing.accountStatus}) – labelled as demo, otherwise unchanged`);
+    } else {
+      console.log(`  • ${email.padEnd(32)} exists (${existing.accountStatus}) – left unchanged`);
+    }
     return existing.id;
   }
-  const user = await prisma.user.create({ data: { email, password: passwordHash, ...data } });
+  const user = await prisma.user.create({ data: { email, password: passwordHash, isDemo: true, ...data } });
   if (profile) await profile(user.id);
   console.log(`  • ${email.padEnd(32)} created (${data.role}, ${data.accountStatus})`);
   return user.id;

@@ -5,8 +5,12 @@ import { IMPACT_ESTIMATES } from '@/lib/matching';
 /**
  * Impact and platform statistics, computed from database records only.
  *
- * "Estimated" figures (meals, weight, CO2, water) come from ImpactRecord rows, which are written
- * when an NGO confirms receipt, using the conversion factors in IMPACT_ESTIMATES.
+ * Three kinds of figures are kept apart:
+ *  - Verified records: counts/quantities from deliveries the receiving NGO confirmed (or an admin
+ *    verified after a reported problem). Unconfirmed deliveries are reported separately, never mixed in.
+ *  - Estimates: meals, weight, CO2 and water from ImpactRecord rows (verified deliveries only),
+ *    using the conversion factors in IMPACT_ESTIMATES.
+ *  - Demo data: the share of the above that comes from seeded demo accounts (User.isDemo).
  */
 
 type UnitTotals = { MEALS: number; KG: number };
@@ -18,6 +22,12 @@ export type ImpactScope =
   | { kind: 'donor'; donorProfileId: string }
   | { kind: 'ngo'; ngoProfileId: string }
   | { kind: 'volunteer'; volunteerProfileId: string };
+
+function sumByUnit(rows: { deliveredQuantity: number | null; requestedQuantity: number; donation: { unit: 'MEALS' | 'KG' } }[]) {
+  const totals = emptyUnits();
+  for (const row of rows) totals[row.donation.unit] += row.deliveredQuantity ?? row.requestedQuantity;
+  return { MEALS: r2(totals.MEALS), KG: r2(totals.KG) };
+}
 
 export async function getImpactStats(scope: ImpactScope = { kind: 'platform' }) {
   const impactWhere: Prisma.ImpactRecordWhereInput =
@@ -31,80 +41,89 @@ export async function getImpactStats(scope: ImpactScope = { kind: 'platform' }) 
     scope.kind === 'donor' ? { donation: { donorProfileId: scope.donorProfileId } }
       : scope.kind === 'ngo' ? { ngoProfileId: scope.ngoProfileId }
         : scope.kind === 'volunteer'
-          ? { assignments: { some: { volunteerProfileId: scope.volunteerProfileId, status: { in: ['DELIVERED'] } } } }
+          ? { assignments: { some: { volunteerProfileId: scope.volunteerProfileId, status: 'DELIVERED' } } }
           : {};
+  const listed: Prisma.FoodDonationWhereInput = { ...donationWhere, status: { not: 'CANCELLED' } };
+  const deliveredSelect = { deliveredQuantity: true, requestedQuantity: true, donation: { select: { unit: true } } } as const;
 
-  const [impact, donationCount, donatedByUnit, openDonations, completedDeliveries, awaitingConfirmation, deliveredRows, byCategory] =
+  const [impact, donationCount, listedByUnit, openDonations, completedDonations, verifiedRows, awaitingRows, openDisputes, byCategory] =
     await Promise.all([
       prisma.impactRecord.aggregate({
         where: impactWhere,
         _sum: { mealsRescued: true, weightKg: true, co2SavedKg: true, waterSavedLiters: true },
         _count: true,
       }),
-      prisma.foodDonation.count({ where: { ...donationWhere, status: { not: 'CANCELLED' } } }),
-      prisma.foodDonation.groupBy({
-        by: ['unit'],
-        where: { ...donationWhere, status: { not: 'CANCELLED' } },
-        _sum: { quantity: true },
-      }),
+      prisma.foodDonation.count({ where: listed }),
+      prisma.foodDonation.groupBy({ by: ['unit'], where: listed, _sum: { quantity: true } }),
       prisma.foodDonation.count({
         where: { ...donationWhere, status: { in: ['AVAILABLE', 'PARTIALLY_RESERVED'] }, safePickupDeadline: { gt: new Date() } },
       }),
-      prisma.foodRequest.count({ where: { ...requestWhere, status: 'COMPLETED' } }),
-      prisma.foodRequest.count({ where: { ...requestWhere, status: 'DELIVERED' } }),
-      prisma.foodRequest.findMany({
-        where: { ...requestWhere, status: { in: ['DELIVERED', 'COMPLETED'] } },
-        select: { deliveredQuantity: true, requestedQuantity: true, donation: { select: { unit: true } } },
-        take: 10_000,
-      }),
+      prisma.foodDonation.count({ where: { ...donationWhere, status: 'COMPLETED' } }),
+      prisma.foodRequest.findMany({ where: { ...requestWhere, status: 'COMPLETED' }, select: deliveredSelect, take: 10_000 }),
+      prisma.foodRequest.findMany({ where: { ...requestWhere, status: 'DELIVERED' }, select: deliveredSelect, take: 10_000 }),
+      prisma.foodRequest.count({ where: { ...requestWhere, status: 'DISPUTED', disputeResolvedAt: null } }),
       prisma.foodDonation.groupBy({
         by: ['foodCategory'],
-        where: { ...donationWhere, status: { not: 'CANCELLED' } },
+        where: listed,
         _count: true,
         orderBy: { _count: { foodCategory: 'desc' } },
       }),
     ]);
 
-  const donated = emptyUnits();
-  for (const row of donatedByUnit) donated[row.unit] = r2(row._sum.quantity);
-  const delivered = emptyUnits();
-  for (const row of deliveredRows) delivered[row.donation.unit] += row.deliveredQuantity ?? row.requestedQuantity;
-  delivered.MEALS = r2(delivered.MEALS);
-  delivered.KG = r2(delivered.KG);
+  const quantityListed = emptyUnits();
+  for (const row of listedByUnit) quantityListed[row.unit] = r2(row._sum.quantity);
+  const quantityVerified = sumByUnit(verifiedRows);
+  const rate = (u: keyof UnitTotals) => (quantityListed[u] > 0 ? r2((quantityVerified[u] / quantityListed[u]) * 100) : null);
 
-  const platformOnly = scope.kind === 'platform'
-    ? await Promise.all([
+  let participants = null;
+  let demo = null;
+  if (scope.kind === 'platform') {
+    const demoDonor = { donorProfile: { user: { isDemo: true } } } satisfies Prisma.FoodDonationWhereInput;
+    const [activeVolunteers, participatingNgos, activeDonors, volunteerVerifiedDeliveries, demoDonations, demoImpact] = await Promise.all([
       prisma.volunteerProfile.count({
-        where: {
-          user: { accountStatus: 'APPROVED' },
-          assignments: { some: { status: { in: ['ACCEPTED', 'PICKED_UP', 'DELIVERED'] } } },
-        },
+        where: { user: { accountStatus: 'APPROVED' }, assignments: { some: { status: { in: ['ACCEPTED', 'PICKED_UP', 'DELIVERED'] } } } },
       }),
       prisma.nGOProfile.count({
         where: { user: { accountStatus: 'APPROVED' }, requests: { some: { status: { notIn: ['CANCELLED'] } } } },
       }),
       prisma.donorProfile.count({ where: { user: { accountStatus: 'APPROVED' }, donations: { some: {} } } }),
-    ])
-    : null;
+      prisma.impactRecord.count({ where: { volunteerProfileId: { not: null } } }),
+      prisma.foodDonation.count({ where: { ...listed, ...demoDonor } }),
+      prisma.impactRecord.aggregate({
+        where: { request: { donation: demoDonor } },
+        _sum: { mealsRescued: true },
+        _count: true,
+      }),
+    ]);
+    participants = { activeVolunteers, participatingNgos, activeDonors, volunteerVerifiedDeliveries };
+    demo = {
+      donations: demoDonations,
+      verifiedDeliveries: demoImpact._count,
+      mealsServed: r2(demoImpact._sum.mealsRescued),
+      note: 'Records created by the seeded demo accounts (prisma/seed.ts). They are included in the totals above.',
+    };
+  }
 
   return {
     scope: scope.kind,
     donations: {
       total: donationCount,
-      quantityDonated: donated,
+      quantityListed,
       openNow: openDonations,
+      completed: completedDonations,
       byCategory: byCategory.map((c) => ({ category: c.foodCategory, count: c._count })),
     },
     deliveries: {
-      completed: completedDeliveries,
-      awaitingConfirmation,
-      quantityDelivered: delivered,
+      // Verified = confirmed by the receiving NGO (or verified by an admin after a reported problem).
+      completed: verifiedRows.length,
+      quantityVerified,
+      awaitingConfirmation: awaitingRows.length,
+      quantityAwaitingConfirmation: sumByUnit(awaitingRows),
+      openDisputes,
+      recoveryRatePercent: { MEALS: rate('MEALS'), KG: rate('KG') },
     },
-    participants: platformOnly && {
-      activeVolunteers: platformOnly[0],
-      participatingNgos: platformOnly[1],
-      activeDonors: platformOnly[2],
-    },
+    participants,
+    demo,
     estimates: {
       confirmedDeliveries: impact._count,
       mealsServed: r2(impact._sum.mealsRescued),
@@ -115,19 +134,20 @@ export async function getImpactStats(scope: ImpactScope = { kind: 'platform' }) 
         mealsPerKg: IMPACT_ESTIMATES.mealsPerKg,
         co2KgPerKgFood: IMPACT_ESTIMATES.co2PerKg,
         waterLitersPerKgFood: IMPACT_ESTIMATES.waterPerKg,
-        note: 'Estimates count only deliveries the receiving NGO has confirmed. Quantities entered in meals are converted to kg (and vice versa) with mealsPerKg.',
+        note: 'Estimates count verified deliveries only. Quantities entered in meals are converted to kg (and vice versa) with mealsPerKg.',
       },
     },
   };
 }
 
 export async function getAdminStats() {
-  const [usersByRoleStatus, donationsByStatus, requestsByStatus, activeAssignments, unassigned] = await Promise.all([
+  const [usersByRoleStatus, donationsByStatus, requestsByStatus, activeAssignments, unassigned, openDisputes] = await Promise.all([
     prisma.user.groupBy({ by: ['role', 'accountStatus'], _count: true }),
     prisma.foodDonation.groupBy({ by: ['status'], _count: true }),
     prisma.foodRequest.groupBy({ by: ['status'], _count: true }),
     prisma.volunteerAssignment.count({ where: { status: { in: ['ASSIGNED', 'ACCEPTED', 'PICKED_UP'] } } }),
     prisma.foodRequest.count({ where: { status: 'ACCEPTED' } }),
+    prisma.foodRequest.count({ where: { status: 'DISPUTED', disputeResolvedAt: null } }),
   ]);
   const users = { total: 0, pending: 0, byRole: {} as Record<string, number>, byStatus: {} as Record<string, number> };
   for (const row of usersByRoleStatus) {
@@ -142,5 +162,6 @@ export async function getAdminStats() {
     requestsByStatus: Object.fromEntries(requestsByStatus.map((r) => [r.status, r._count])),
     activeAssignments,
     awaitingVolunteer: unassigned,
+    openDisputes,
   };
 }

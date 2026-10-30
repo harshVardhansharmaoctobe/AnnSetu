@@ -108,6 +108,7 @@ enum NotificationType {
   DELIVERY_COMPLETED
   RECEIPT_CONFIRMED
   DISPUTE_RAISED
+  DISPUTE_RESOLVED
   DONATION_CANCELLED
   ACCOUNT_APPROVED
   ACCOUNT_REJECTED
@@ -128,6 +129,7 @@ model User {
   phone         String?
   role          UserRole
   accountStatus AccountStatus @default(PENDING)
+  isDemo        Boolean       @default(false) // created by prisma/seed.ts; lets dashboards separate demo data
   avatarUrl     String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
@@ -240,6 +242,8 @@ model FoodRequest {
   notes             String?
   rejectionReason   String?
   disputeReason     String?
+  disputeResolution String? // admin's note when a reported problem is resolved
+  disputeResolvedAt DateTime?
   approvedAt        DateTime?
   pickedUpAt        DateTime?
   deliveredAt       DateTime?

@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { signOut } from 'next-auth/react';
 import { useEffect, useState } from 'react';
 import {
-  BarChart3, Bell, ClipboardList, FileClock, Hourglass, Inbox, LayoutDashboard, Leaf, LogOut, Menu,
+  AlertTriangle, BarChart3, Bell, ClipboardList, FileClock, Hourglass, Inbox, LayoutDashboard, Leaf, LogOut, Menu,
   Package, PlusCircle, Search, Truck, User, Users, X,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -41,6 +41,7 @@ const ROLE_NAV: Record<string, NavItem[]> = {
     { label: 'Users', href: '/dashboard/admin/users', icon: Users },
     { label: 'Deliveries', href: '/dashboard/admin/deliveries', icon: Truck },
     { label: 'Donations', href: '/dashboard/admin/donations', icon: Package },
+    { label: 'Reports', href: '/dashboard/admin/reports', icon: AlertTriangle },
     { label: 'Audit log', href: '/dashboard/admin/audit', icon: FileClock },
   ],
 };

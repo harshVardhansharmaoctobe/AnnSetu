@@ -46,15 +46,18 @@ export default function BrowsePage() {
   })}`;
   const { data, error, loading, reload } = useApi<DiscoveryResult>(url);
 
-  const markers: MapMarker[] = useMemo(
-    () => (data?.items ?? []).map((d) => ({
-      id: d.id, lat: d.latitude, lng: d.longitude, title: d.foodName,
-      subtitle: `${d.remainingQuantity} ${d.unit.toLowerCase()} · ${d.donorProfile.organisationName}`,
-      href: `/dashboard/ngo/donations/${d.id}`,
-    })),
-    [data]
-  );
   const origin = useMemo(() => (data?.origin ? { lat: data.origin.lat, lng: data.origin.lng } : null), [data]);
+  const markers: MapMarker[] = useMemo(
+    () => [
+      ...(data?.items ?? []).map((d) => ({
+        id: d.id, lat: d.latitude, lng: d.longitude, title: d.foodName, tone: 'green' as const,
+        subtitle: `${d.remainingQuantity} ${d.unit.toLowerCase()} · ${d.donorProfile.organisationName}${d.distanceKm !== null ? ` · ${d.distanceKm} km` : ''}`,
+        href: `/dashboard/ngo/donations/${d.id}`,
+      })),
+      ...(origin ? [{ id: 'origin', lat: origin.lat, lng: origin.lng, title: 'Your NGO', subtitle: 'Saved NGO address', tone: 'blue' as const }] : []),
+    ],
+    [data, origin]
+  );
   const setFilter = (fn: (v: string) => void) => (e: React.ChangeEvent<HTMLSelectElement>) => { fn(e.target.value); setPage(1); };
 
   return (
@@ -107,8 +110,15 @@ export default function BrowsePage() {
 
       {view === 'map' && (
         <div className="mb-6">
-          <MapView markers={markers} center={origin} className="h-96" />
-          {origin && <p className="mt-1 text-xs text-muted-foreground">Markers show donations on this page; your location is the map centre.</p>}
+          <MapView
+            markers={markers}
+            className="h-96"
+            label="Map of available donations"
+            legend={[{ tone: 'green', label: 'Available donation (pickup point)' }, ...(origin ? [{ tone: 'blue' as const, label: 'Your NGO' }] : [])]}
+          />
+          <p className="mt-1 text-xs text-muted-foreground">
+            {origin ? 'Shows the donations on this page. Click a marker to open it.' : 'Add your NGO address in your profile to see your own location and distances.'}
+          </p>
         </div>
       )}
 

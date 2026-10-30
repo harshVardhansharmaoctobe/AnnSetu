@@ -12,12 +12,12 @@ export const uniqueEmail = (label: string) => `${label}.${randomUUID().slice(0, 
 const JAIPUR = { lat: 26.9124, lng: 75.7873 };
 
 /** Creates a user directly in the test database, with a completed role profile by default. */
-export async function createUser(role: UserRole, accountStatus: AccountStatus = 'APPROVED', opts: { profile?: boolean; label?: string } = {}) {
+export async function createUser(role: UserRole, accountStatus: AccountStatus = 'APPROVED', opts: { profile?: boolean; label?: string; isDemo?: boolean } = {}) {
   const prisma = testPrisma();
   hash ??= await bcrypt.hash(PASSWORD, 4);
   const email = uniqueEmail(opts.label ?? role.toLowerCase());
   const user = await prisma.user.create({
-    data: { email, name: `Test ${role} ${email.slice(0, 12)}`, password: hash, role, accountStatus, phone: '+91 90000 11111' },
+    data: { email, name: `Test ${role} ${email.slice(0, 12)}`, password: hash, role, accountStatus, phone: '+91 90000 11111', isDemo: opts.isDemo ?? false },
   });
   const profile = opts.profile ?? true;
   let profileId: string | null = null;
@@ -38,7 +38,7 @@ export async function createUser(role: UserRole, accountStatus: AccountStatus = 
 }
 
 /** Creates a user and returns a signed-in client for it. */
-export async function signedIn(role: UserRole, accountStatus: AccountStatus = 'APPROVED', opts: { profile?: boolean; label?: string } = {}) {
+export async function signedIn(role: UserRole, accountStatus: AccountStatus = 'APPROVED', opts: { profile?: boolean; label?: string; isDemo?: boolean } = {}) {
   const user = await createUser(role, accountStatus, opts);
   const client = new Client();
   const { error } = await client.login(user.email, PASSWORD);
@@ -67,8 +67,8 @@ export function donationBody(overrides: Record<string, unknown> = {}) {
 }
 
 /** Runs the workflow up to the given request status through the real API. */
-export async function workflow(target: 'requested' | 'approved' | 'assigned' | 'picked' | 'delivered', opts: { quantity?: number } = {}) {
-  const donor = await signedIn('DONOR');
+export async function workflow(target: 'requested' | 'approved' | 'assigned' | 'picked' | 'delivered', opts: { quantity?: number; demoDonor?: boolean } = {}) {
+  const donor = await signedIn('DONOR', 'APPROVED', { isDemo: opts.demoDonor });
   const ngo = await signedIn('NGO');
   const donation = (await donor.client.post('/api/donations', donationBody({ quantity: opts.quantity ?? 10 }))).data;
   const request = (await ngo.client.post('/api/requests', { donationId: donation.id, requestedQuantity: opts.quantity ?? 10 })).data;

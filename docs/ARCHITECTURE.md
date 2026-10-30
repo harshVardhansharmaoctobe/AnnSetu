@@ -1,5 +1,9 @@
 # FoodBridge – Architecture
 
+**Business model.** FoodBridge is free: donors give surplus edible food, verified NGOs request it and never pay
+for food or delivery, and volunteers carry it. The platform has no payments, payment gateways or fees. Logistics
+sponsorship (donor, CSR or platform-funded) is outside the MVP; no sponsorship or funding data is simulated.
+
 FoodBridge is a single Next.js 15 (App Router) application backed by PostgreSQL 16 (with PostGIS
 available) through Prisma 5. There is no separate backend service: API routes under `src/app/api`
 are the backend, and React pages under `src/app` are the frontend.
@@ -47,7 +51,9 @@ FoodRequest:   PENDING ──approve──► ACCEPTED ──assign/claim──�
                   ▼                    ▼
                REJECTED            CANCELLED            PICKED_UP ──deliver (photo proof)──► DELIVERED
                                                          DELIVERED ──NGO confirms──► COMPLETED (impact recorded)
-                                                         DELIVERED ──NGO disputes──► DISPUTED
+                                                         DELIVERED ──NGO disputes──► DISPUTED (report)
+                                                         DISPUTED ──admin verifies──► COMPLETED (impact for verified qty)
+                                                         DISPUTED ──admin closes──► DISPUTED + disputeResolvedAt (no impact)
 
 FoodDonation:  AVAILABLE ⇄ PARTIALLY_RESERVED ⇄ FULLY_RESERVED ──all requests finished──► COMPLETED
                (open) ──deadline passes──► EXPIRED          any open state ──donor cancels──► CANCELLED
@@ -93,16 +99,30 @@ Every transition is a **conditional update on the expected current state** insid
 
 ## Location and discovery
 
-Coordinates are stored as latitude/longitude. Distances are computed with the Haversine formula
+Coordinates are stored as latitude/longitude and only ever come from saved profiles/listings (map click,
+device location after permission, or typed) – there is no live tracking and no fabricated position. Maps:
+NGO discovery (donations + the NGO's own location), donor donation detail (pickup + requesting NGOs),
+volunteer assignment and admin delivery detail (pickup + drop-off), admin platform map (approved donors,
+NGOs, open donations, deliveries in progress; `GET /api/admin/map`). Invalid or 0,0 coordinates are skipped
+and reported under the map. Markers carry a title (accessible name). Distances are computed with the Haversine formula
 (`calculateDistance`); NGO discovery loads up to 500 matching open donations, computes distance from
 the NGO's saved location, and supports sort by nearest/newest/expiry and a radius filter. The match score
 (`src/lib/matching.ts`) weights distance 40 %, urgency 30 %, capacity 20 %, category 10 %. Maps use plain
 Leaflet with OpenStreetMap tiles; if tiles cannot load, lists and distances still work. PostGIS is enabled
 but not required at this scale.
 
-## Impact estimates
+## Impact: verified records, estimates and demo data
 
-Written to `ImpactRecord` only when the receiving NGO confirms receipt. Factors (`IMPACT_ESTIMATES`):
+The impact dashboard keeps three kinds of figures apart (`src/lib/stats.ts`):
+
+- **Verified records** – deliveries count (and their quantities, recovery rate and volunteer contributions) only
+  when the receiving NGO confirmed receipt, or an admin verified a reported problem. Deliveries awaiting
+  confirmation and open reports are shown separately and are not counted.
+- **Estimates** – derived from verified deliveries only (below).
+- **Demo data** – `User.isDemo` is set by the seed; the dashboard states how many donations, verified
+  deliveries and meals come from demo accounts (included in, not added to, the totals).
+
+`ImpactRecord` rows are written only when the receiving NGO confirms receipt or an admin verifies a dispute. Factors (`IMPACT_ESTIMATES`):
 1 kg food ≈ 2.5 meals, ≈ 2.5 kg CO₂e, ≈ 1000 L water. All estimate figures are labelled "est." in the UI
 and the factors are shown next to them. Counts (donations, deliveries, quantities) come straight from records.
 

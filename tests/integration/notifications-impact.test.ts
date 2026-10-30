@@ -49,18 +49,27 @@ describe('notifications', () => {
 });
 
 describe('impact aggregation', () => {
-  it('counts only real records and updates after a confirmed delivery', async () => {
+  it('counts only verified deliveries; unconfirmed ones are reported separately', async () => {
     const before = (await new Client().get('/api/impact')).data;
     const flow = await workflow('delivered', { quantity: 25 });
     const mid = (await new Client().get('/api/impact')).data;
     expect(mid.donations.total).toBe(before.donations.total + 1);
+    expect(mid.donations.quantityListed.MEALS).toBe(before.donations.quantityListed.MEALS + 25);
     expect(mid.deliveries.awaitingConfirmation).toBe(before.deliveries.awaitingConfirmation + 1);
-    expect(mid.deliveries.quantityDelivered.MEALS).toBe(before.deliveries.quantityDelivered.MEALS + 25);
-    expect(mid.estimates.mealsServed).toBe(before.estimates.mealsServed); // not confirmed yet
+    expect(mid.deliveries.quantityAwaitingConfirmation.MEALS).toBe(before.deliveries.quantityAwaitingConfirmation.MEALS + 25);
+    // Not confirmed yet: nothing changes in the verified figures or estimates.
+    expect(mid.deliveries.completed).toBe(before.deliveries.completed);
+    expect(mid.deliveries.quantityVerified.MEALS).toBe(before.deliveries.quantityVerified.MEALS);
+    expect(mid.estimates.mealsServed).toBe(before.estimates.mealsServed);
 
     await flow.ngo.client.post(`/api/requests/${flow.request.id}/confirm`, { outcome: 'CONFIRMED' });
     const after = (await new Client().get('/api/impact')).data;
     expect(after.deliveries.completed).toBe(before.deliveries.completed + 1);
+    expect(after.deliveries.quantityVerified.MEALS).toBe(before.deliveries.quantityVerified.MEALS + 25);
+    expect(after.deliveries.awaitingConfirmation).toBe(before.deliveries.awaitingConfirmation);
+    expect(after.donations.completed).toBe(before.donations.completed + 1);
+    expect(after.participants.volunteerVerifiedDeliveries).toBe(before.participants.volunteerVerifiedDeliveries + 1);
+    expect(after.deliveries.recoveryRatePercent.MEALS).toBeGreaterThan(0);
     expect(after.estimates.mealsServed).toBeCloseTo(before.estimates.mealsServed + 25, 2);
     expect(after.estimates.foodWastePreventedKg).toBeCloseTo(before.estimates.foodWastePreventedKg + 10, 2);
     expect(after.estimates.co2SavedKg).toBeCloseTo(before.estimates.co2SavedKg + 25, 2);
@@ -78,6 +87,23 @@ describe('impact aggregation', () => {
     expect(vol.estimates.confirmedDeliveries).toBe(1);
     const stranger = await signedIn('DONOR');
     expect((await stranger.client.get('/api/impact?scope=me')).data.donations.total).toBe(0);
+  });
+
+  it('reports the share of figures that comes from demo accounts', async () => {
+    const before = (await new Client().get('/api/impact')).data;
+    const real = await workflow('delivered', { quantity: 4 });
+    await real.ngo.client.post(`/api/requests/${real.request.id}/confirm`, { outcome: 'CONFIRMED' });
+    const mid = (await new Client().get('/api/impact')).data;
+    expect(mid.demo.donations).toBe(before.demo.donations); // a real donor's records are not demo
+    expect(mid.demo.verifiedDeliveries).toBe(before.demo.verifiedDeliveries);
+
+    const demo = await workflow('delivered', { quantity: 6, demoDonor: true });
+    await demo.ngo.client.post(`/api/requests/${demo.request.id}/confirm`, { outcome: 'CONFIRMED' });
+    const after = (await new Client().get('/api/impact')).data;
+    expect(after.demo.donations).toBe(before.demo.donations + 1);
+    expect(after.demo.verifiedDeliveries).toBe(before.demo.verifiedDeliveries + 1);
+    expect(after.demo.mealsServed).toBeCloseTo(before.demo.mealsServed + 6, 2);
+    expect(after.deliveries.completed).toBe(before.deliveries.completed + 2); // demo is included in, not added to, totals
   });
 
   it('the public endpoint exposes aggregates only', async () => {

@@ -1,16 +1,27 @@
-import { Droplets, HandHeart, Leaf, Package, Scale, Truck, Users, UtensilsCrossed } from 'lucide-react';
+import { BadgeCheck, Droplets, FlaskConical, HandHeart, Leaf, Package, Recycle, Scale, Truck, Users, UtensilsCrossed } from 'lucide-react';
 import { StatCard } from '@/components/states';
+
+type Units = { MEALS: number; KG: number };
 
 export interface ImpactData {
   scope: string;
   donations: {
     total: number;
-    quantityDonated: { MEALS: number; KG: number };
+    quantityListed: Units;
     openNow: number;
+    completed: number;
     byCategory: { category: string; count: number }[];
   };
-  deliveries: { completed: number; awaitingConfirmation: number; quantityDelivered: { MEALS: number; KG: number } };
-  participants: { activeVolunteers: number; participatingNgos: number; activeDonors: number } | null;
+  deliveries: {
+    completed: number;
+    quantityVerified: Units;
+    awaitingConfirmation: number;
+    quantityAwaitingConfirmation: Units;
+    openDisputes: number;
+    recoveryRatePercent: { MEALS: number | null; KG: number | null };
+  };
+  participants: { activeVolunteers: number; participatingNgos: number; activeDonors: number; volunteerVerifiedDeliveries: number } | null;
+  demo: { donations: number; verifiedDeliveries: number; mealsServed: number; note: string } | null;
   estimates: {
     confirmedDeliveries: number;
     mealsServed: number;
@@ -22,42 +33,54 @@ export interface ImpactData {
 }
 
 const n = (v: number) => v.toLocaleString('en-IN', { maximumFractionDigits: 1 });
-const qty = (q: { MEALS: number; KG: number }) =>
-  [q.MEALS ? `${n(q.MEALS)} meals` : null, q.KG ? `${n(q.KG)} kg` : null].filter(Boolean).join(' + ') || '0';
+const qty = (q: Units) => [q.MEALS ? `${n(q.MEALS)} meals` : null, q.KG ? `${n(q.KG)} kg` : null].filter(Boolean).join(' + ') || '0';
 const label = (c: string) => c.toLowerCase().replace(/_/g, ' ').replace(/^\w/, (x) => x.toUpperCase());
+const rates = (r: { MEALS: number | null; KG: number | null }) =>
+  [r.MEALS !== null ? `${r.MEALS}% of meals` : null, r.KG !== null ? `${r.KG}% of kg` : null].filter(Boolean).join(' · ') || '—';
 
-/** Impact figures from real records; estimates are labelled and their formula stated. */
+function SectionTitle({ icon: Icon, title, hint }: { icon: React.ComponentType<{ className?: string }>; title: string; hint: string }) {
+  return (
+    <div className="mb-3">
+      <h2 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-muted-foreground"><Icon className="h-4 w-4" /> {title}</h2>
+      <p className="text-xs text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
+
+/** Verified records, estimates and demo data are shown in separate, labelled sections. */
 export function ImpactPanel({ data }: { data: ImpactData }) {
   const maxCat = Math.max(1, ...data.donations.byCategory.map((c) => c.count));
   const a = data.estimates.assumptions;
+  const d = data.deliveries;
 
   return (
-    <div className="space-y-6" data-testid="impact-panel">
+    <div className="space-y-8" data-testid="impact-panel">
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Recorded activity</h2>
+        <SectionTitle icon={BadgeCheck} title="Verified platform records" hint="Counted from database records. Deliveries count only once the receiving NGO confirmed them (or an admin verified a reported problem)." />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <StatCard label="Total donations" value={n(data.donations.total)} hint={qty(data.donations.quantityDonated)} icon={Package} />
-          <StatCard label="Open donations" value={n(data.donations.openNow)} hint="Available to request now" icon={Leaf} tone="blue" />
-          <StatCard
-            label="Completed deliveries"
-            value={n(data.deliveries.completed)}
-            hint={data.deliveries.awaitingConfirmation ? `${data.deliveries.awaitingConfirmation} awaiting NGO confirmation` : 'Confirmed by the receiving NGO'}
-            icon={Truck}
-            tone="amber"
-          />
-          <StatCard label="Quantity delivered" value={qty(data.deliveries.quantityDelivered)} hint="Delivered or confirmed" icon={HandHeart} tone="rose" />
+          <StatCard label="Total food listed" value={qty(data.donations.quantityListed)} hint={`${n(data.donations.total)} donations`} icon={Package} />
+          <StatCard label="Food delivered (verified)" value={qty(d.quantityVerified)} hint={`Recovery: ${rates(d.recoveryRatePercent)}`} icon={HandHeart} tone="rose" />
+          <StatCard label="Verified deliveries" value={n(d.completed)} hint="Confirmed by the receiving NGO" icon={Truck} tone="amber" />
+          <StatCard label="Completed donations" value={n(data.donations.completed)} hint={`${n(data.donations.openNow)} open right now`} icon={Leaf} tone="blue" />
         </div>
+        {(d.awaitingConfirmation > 0 || d.openDisputes > 0) && (
+          <p className="mt-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+            Not yet counted: {d.awaitingConfirmation} deliver{d.awaitingConfirmation === 1 ? 'y' : 'ies'} awaiting NGO confirmation
+            ({qty(d.quantityAwaitingConfirmation)}){d.openDisputes > 0 && ` · ${d.openDisputes} reported problem(s) under review`}.
+          </p>
+        )}
         {data.participants && (
-          <div className="mt-4 grid gap-4 sm:grid-cols-3">
-            <StatCard label="Active volunteers" value={n(data.participants.activeVolunteers)} hint="Accepted at least one delivery" icon={Users} tone="slate" />
-            <StatCard label="Participating NGOs" value={n(data.participants.participatingNgos)} hint="Requested food at least once" icon={Users} tone="slate" />
+          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard label="Active donors" value={n(data.participants.activeDonors)} hint="Listed food at least once" icon={Users} tone="slate" />
+            <StatCard label="Participating NGOs" value={n(data.participants.participatingNgos)} hint="Requested food at least once" icon={Users} tone="slate" />
+            <StatCard label="Active volunteers" value={n(data.participants.activeVolunteers)} hint="Accepted at least one delivery" icon={Users} tone="slate" />
+            <StatCard label="Volunteer deliveries (verified)" value={n(data.participants.volunteerVerifiedDeliveries)} hint="Carried by volunteers and confirmed" icon={Truck} tone="slate" />
           </div>
         )}
       </section>
 
       <section>
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Estimated impact</h2>
+        <SectionTitle icon={Recycle} title="Estimated impact" hint="Derived from verified deliveries only, using stated assumptions – these are estimates, not measurements." />
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard label="Meals served (est.)" value={n(data.estimates.mealsServed)} icon={UtensilsCrossed} />
           <StatCard label="Food waste prevented (est.)" value={`${n(data.estimates.foodWastePreventedKg)} kg`} icon={Scale} tone="amber" />
@@ -65,14 +88,25 @@ export function ImpactPanel({ data }: { data: ImpactData }) {
           <StatCard label="Water saved (est.)" value={`${n(data.estimates.waterSavedLiters)} L`} icon={Droplets} tone="slate" />
         </div>
         <p className="mt-3 text-xs text-muted-foreground">
-          Estimates use {data.estimates.confirmedDeliveries} NGO-confirmed deliveries only. Assumptions: 1 kg of food ≈ {a.mealsPerKg} meals,
-          ≈ {a.co2KgPerKgFood} kg CO₂e and ≈ {n(a.waterLitersPerKgFood)} L of water. These are rough planning figures, not measurements.
+          Based on {data.estimates.confirmedDeliveries} verified deliveries. Assumptions: 1 kg of food ≈ {a.mealsPerKg} meals,
+          ≈ {a.co2KgPerKgFood} kg CO₂e and ≈ {n(a.waterLitersPerKgFood)} L of water.
         </p>
       </section>
 
+      {data.demo && (
+        <section data-testid="impact-demo">
+          <SectionTitle icon={FlaskConical} title="Demo data" hint={data.demo.note} />
+          <p className="rounded-lg border border-dashed bg-white p-4 text-sm">
+            {data.demo.donations > 0 || data.demo.verifiedDeliveries > 0
+              ? <>Of the figures above, <strong>{n(data.demo.donations)}</strong> donation(s), <strong>{n(data.demo.verifiedDeliveries)}</strong> verified deliver{data.demo.verifiedDeliveries === 1 ? 'y' : 'ies'} and ≈ <strong>{n(data.demo.mealsServed)}</strong> meals come from demo accounts.</>
+              : 'No demo records are included in these figures.'}
+          </p>
+        </section>
+      )}
+
       {data.donations.byCategory.length > 0 && (
         <section>
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-muted-foreground">Donations by category</h2>
+          <SectionTitle icon={Package} title="Donations by category" hint="All listed (non-cancelled) donations." />
           <div className="space-y-2 rounded-xl border bg-white p-5">
             {data.donations.byCategory.map((c) => (
               <div key={c.category} className="grid grid-cols-[8rem_1fr_2.5rem] items-center gap-3 text-sm">

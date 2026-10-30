@@ -63,7 +63,7 @@ export default async function LandingPage() {
           <div className="grid content-center gap-4 sm:grid-cols-2">
             {[
               { icon: UtensilsCrossed, label: 'Meals served (est.)', value: stats ? fmt(stats.estimates.mealsServed) : '—' },
-              { icon: Truck, label: 'Deliveries completed', value: stats ? fmt(stats.deliveries.completed) : '—' },
+              { icon: Truck, label: 'Verified deliveries', value: stats ? fmt(stats.deliveries.completed) : '—' },
               { icon: ClipboardCheck, label: 'Donations listed', value: stats ? fmt(stats.donations.total) : '—' },
               { icon: Users, label: 'NGOs participating', value: stats?.participants ? fmt(stats.participants.participatingNgos) : '—' },
             ].map((s) => (
@@ -96,6 +96,7 @@ export default async function LandingPage() {
                 'Approvals reserve quantities atomically, so food is never promised twice.',
                 'Volunteers carry it with pickup and delivery photo proof.',
                 'Impact is recorded only when the receiving NGO confirms delivery.',
+                'Free for NGOs: donated food and its delivery never cost the NGO anything.',
               ].map((t) => (
                 <li key={t} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-green-600" /> {t}</li>
               ))}
@@ -147,8 +148,11 @@ export default async function LandingPage() {
               ))}
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              Computed from FoodBridge records. Estimates count NGO-confirmed deliveries only and assume 1 kg food ≈ {stats.estimates.assumptions.mealsPerKg} meals
+              Computed from FoodBridge records. Estimates count verified (NGO-confirmed) deliveries only and assume 1 kg food ≈ {stats.estimates.assumptions.mealsPerKg} meals
               and ≈ {stats.estimates.assumptions.co2KgPerKgFood} kg CO₂e.
+              {stats.demo && (stats.demo.donations > 0 || stats.demo.verifiedDeliveries > 0) && (
+                <> Includes demo data: {fmt(stats.demo.donations)} donation(s) and {fmt(stats.demo.verifiedDeliveries)} verified deliver{stats.demo.verifiedDeliveries === 1 ? 'y' : 'ies'} from seeded demo accounts.</>
+              )}
             </p>
           </>
         ) : (
@@ -175,8 +179,8 @@ export default async function LandingPage() {
             {[
               ['Is the food safe?', 'Donors must declare food safety, state storage conditions and set a safe pickup deadline. Expired listings disappear automatically.'],
               ['Who can join?', 'Registered food businesses and institutions (donors), NGOs and community kitchens, and individual volunteers. Admin accounts cannot be created through sign-up.'],
-              ['What does it cost?', 'Nothing. FoodBridge coordinates donations only – there are no payments.'],
-              ['How are impact numbers calculated?', 'From delivered quantities confirmed by NGOs, with the conversion factors shown next to every estimate.'],
+              ['What does it cost?', 'Nothing. Donors give surplus food for free and NGOs never pay for food or delivery. Deliveries are carried by volunteers, and FoodBridge processes no payments.'],
+              ['How are impact numbers calculated?', 'Verified figures count only deliveries the receiving NGO confirmed. Estimates (meals, CO₂e) are derived from those with the conversion factors shown, and records from seeded demo accounts are reported separately.'],
             ].map(([q, a]) => (
               <div key={q} className="rounded-xl border bg-white p-4"><dt className="font-semibold">{q}</dt><dd className="mt-1 text-muted-foreground">{a}</dd></div>
             ))}

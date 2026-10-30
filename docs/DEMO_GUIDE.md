@@ -2,6 +2,10 @@
 
 A 10-minute live demo of the complete food rescue lifecycle with four separate user sessions.
 
+FoodBridge is free: donors give food, NGOs never pay for food or delivery, volunteers carry it, and the app
+processes no payments. Everything created by the seeded accounts below is **demo data** and the impact
+dashboard labels it as such.
+
 ## 1. One-time setup
 
 Prerequisites: Node.js 22, Docker Desktop running.
@@ -46,8 +50,9 @@ donations no NGO has requested yet.
 3. **Donor lists food** – sign in as the donor → *New donation* → title "Paneer biryani", quantity 40 meals,
    storage "Hot-held", add a photo, tick the food-safety declaration → **Publish donation**.
    The pickup location defaults to the donor's profile.
-4. **NGO discovers it** – sign in as the NGO → *Find food*: donations sorted by real distance from the NGO,
-   with match score and time left; toggle **Map**. Open the biryani.
+4. **NGO discovers it on the map** – sign in as the NGO → *Find food* → **Map**: green markers are available
+   donations, the blue marker is the NGO's own address. Click the biryani marker → click its name in the popup.
+   (The list view shows the same donations with real distances, match score and time left.)
 5. **NGO requests** – quantity 30, beneficiaries 60 → **Send request**. The request page shows *Pending*.
 6. **Donor approves** – donor dashboard → *Requests awaiting your decision* → **Approve**
    (10 meals stay available for other NGOs). The NGO gets a notification.
@@ -63,8 +68,13 @@ donations no NGO has requested yet.
     **Confirm receipt** → impact recorded (≈ 30 meals). *Report problem* shows the dispute path instead.
 12. **Admin views the completed delivery** – *Deliveries* → *Completed* → open it: full timeline, contacts,
     pickup and delivery proof photos.
-13. **Impact dashboard** – *Impact*: completed deliveries, quantities and labelled estimates (meals, kg,
-    CO₂e, water) update from the confirmed delivery. Show the landing page again – the numbers changed.
+13. **Impact dashboard** – *Impact*: *Verified platform records* update from the confirmed delivery (food
+    delivered, verified deliveries, completed donations, volunteer deliveries, recovery rate); *Estimated impact*
+    shows meals, kg, CO₂e and water with their assumptions; *Demo data* states how much comes from the demo
+    accounts. Deliveries not yet confirmed are listed separately and not counted. The landing page updates too.
+14. **Reports (optional)** – as the NGO choose *Report problem* instead of confirming; as the admin open
+    *Reports* → **Resolve** → *Delivery verified* (impact recorded for the verified quantity) or *Could not be
+    verified* (no impact). Everyone involved is notified and the decision appears in the audit log.
 
 Optional extras: concurrent safety (two NGOs request more than is available; only what remains can be
 approved), notifications bell and *Mark all as read*, suspending a user (they are signed out immediately),
@@ -77,7 +87,8 @@ mobile layout (resize the window or use a phone).
 | `npm run health` reports the database down | `docker compose ps` – start Docker Desktop, then `docker compose up -d` |
 | Login says "Too many failed sign-in attempts" | Wait 15 minutes, or restart the server (limits are in memory) |
 | No donations in *Find food* | Demo donations expire; run `npm run db:seed` again, or create a new one as the donor |
-| Map tiles are grey | No internet access; lists, distances and all actions still work |
+| Map tiles are grey | No internet access; markers, lists, distances and all actions still work |
+| "Location permission denied" | Click the map or type coordinates instead – nothing else needs location access |
 | Docker/PostgreSQL write errors | Free disk space on the drive holding Docker's data (C: on this machine) |
 
 Never run `docker compose down -v` – it deletes the database volume.

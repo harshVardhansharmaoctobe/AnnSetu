@@ -1,6 +1,7 @@
 # FoodBridge – Testing Report
 
-All results below were produced by actually running the suites on 2026-10-31 (Windows 11, Node 22.23.2,
+All results below were produced by actually running the suites on 2026-10-31 (re-run after the final
+business-rule changes: verified-only impact, demo share, dispute resolution, maps) (Windows 11, Node 22.23.2,
 Next.js 15.5.28, PostgreSQL 16 + PostGIS in Docker). Nothing was skipped.
 
 ## How to run
@@ -29,8 +30,8 @@ server under test is not reading the development database.
 | 6 | `npx tsc --noEmit` | ✅ 0 errors |
 | 7 | ESLint (`next lint`, core-web-vitals + typescript) | ✅ no warnings or errors |
 | 8 | Unit tests | ✅ 33/33 |
-| 9 | `next build` (clean) | ✅ 50 routes |
-| 10 | Integration tests | ✅ 106/106 |
+| 9 | `next build` (clean) | ✅ 53 app routes (from `.next/app-path-routes-manifest.json`) |
+| 10 | Integration tests | ✅ 111/111 |
 | 11 | E2E tests | ✅ 4/4 |
 | 12 | Docker health | ✅ `healthy`, 0 restarts |
 | 13 | DB connectivity (`pg_isready`) | ✅ accepting connections |
@@ -49,13 +50,13 @@ server under test is not reading the development database.
 | B. Authorization (roles, ownership, status) | `tests/integration/authorization.test.ts` | 12 | 12 | 0 | 0 |
 | C. Donations | `tests/integration/donations.test.ts` | 18 | 18 | 0 | 0 |
 | D. Requests (+ concurrency) | `tests/integration/requests.test.ts` | 12 | 12 | 0 | 0 |
-| E. Volunteer assignments, delivery, confirmation | `tests/integration/assignments.test.ts` | 9 | 9 | 0 | 0 |
-| F. Admin | `tests/integration/admin.test.ts` | 7 | 7 | 0 | 0 |
-| G. Notifications and impact | `tests/integration/notifications-impact.test.ts` | 7 | 7 | 0 | 0 |
+| E. Volunteer assignments, delivery, confirmation, dispute resolution | `tests/integration/assignments.test.ts` | 12 | 12 | 0 | 0 |
+| F. Admin (incl. platform map) | `tests/integration/admin.test.ts` | 8 | 8 | 0 | 0 |
+| G. Notifications and impact (verified-only, demo share) | `tests/integration/notifications-impact.test.ts` | 8 | 8 | 0 | 0 |
 | H. Uploads | `tests/integration/uploads.test.ts` | 11 | 11 | 0 | 0 |
 | I. E2E full demo flow (desktop) | `tests/e2e/demo-flow.spec.ts` | 2 | 2 | 0 | 0 |
 | I. E2E responsive (Pixel 7 viewport) | `tests/e2e/mobile.spec.ts` | 2 | 2 | 0 | 0 |
-| **Total automated** | | **143** | **143** | **0** | **0** |
+| **Total automated** | | **148** | **148** | **0** | **0** |
 
 ### What the key tests prove
 - **Authentication:** valid/invalid/unknown login, case-insensitive email, duplicate and invalid-JSON
@@ -69,13 +70,19 @@ server under test is not reading the development database.
   two volunteers claiming one delivery at once → exactly one active assignment.
 - **Delivery:** pickup before acceptance, delivery before pickup, delivery without proof, and delivered
   quantity above the approved amount are all rejected; proofs are recorded with the submitting user.
-- **Impact:** aggregates change by exactly the delivered quantities (25 meals → +25 meals, +10 kg, +25 kg CO₂e)
-  and only after NGO confirmation; disputed deliveries record no impact; the public endpoint has no PII.
+- **Impact:** verified figures change only after NGO confirmation (25 meals → +25 verified meals, +10 kg,
+  +25 kg CO₂e); unconfirmed deliveries are reported separately; disputed deliveries record no impact; records
+  from demo accounts are counted in a separate demo share; the public endpoint has no PII.
+- **Reports (disputes):** only admins can resolve; verify records impact for the verified quantity (capped at the
+  approved amount); close records none; a dispute can be resolved once; NGO, donor and volunteer are notified
+  and the decision is audit-logged.
+- **Maps:** the admin map lists only approved participants with stored coordinates and no contact data.
 - **Uploads:** valid PNG stored under a UUID and served with `nosniff` + sandbox CSP; text renamed to .png,
   SVG, EXE, wrong MIME, extension/content mismatch, oversized files, missing file, traversal paths, NGO and
   pending uploaders, and anonymous reads are all rejected.
 - **E2E:** separate browser sessions for all four roles complete the whole demo through the UI: register,
-  complete profiles, admin approval, donation with photo, discovery with distance, request, approval,
+  complete profiles, admin approval, donation with photo, discovery with distance **and on the map** (NGO marker
+  and the donation marker → popup → detail), request, approval,
   admin assignment, accept, pickup, proof upload, delivery, NGO confirmation, admin monitoring, impact
   numbers, notifications, logout. Mobile tests check no horizontal overflow and the mobile menu.
 
@@ -103,5 +110,6 @@ No assertion was weakened and no test was skipped to obtain a green result.
 ## Environment notes
 - Playwright's own Chromium could not be downloaded because drive C: is full (`ENOSPC`). E2E tests ran on
   the installed Google Chrome via `PW_CHANNEL=chrome`, with temp profiles under the project's `.pw-tmp/`.
-- At the end of the session drive C: reached 0 MB free (not caused by this project's files). Docker keeps
-  PostgreSQL data on C:, so free space there is needed for the database to keep accepting writes.
+- Drive C: was at 0–191 MB free during these runs (not caused by this project's files). Docker keeps
+  PostgreSQL data on C:, so all test, build and npm temp/cache files were redirected to the project on E:
+  and C: was re-checked between database-writing steps. Free space on C: is still needed for reliable writes.

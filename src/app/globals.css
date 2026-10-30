@@ -87,6 +87,15 @@
   z-index: 1;
   border-radius: 0.625rem;
 }
+.fb-marker {
+  border-radius: 9999px;
+  border: 2px solid #fff;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+}
+.fb-marker-green { background: #16a34a; }
+.fb-marker-blue { background: #2563eb; }
+.fb-marker-amber { background: #d97706; }
+.fb-marker-red { background: #dc2626; }
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
