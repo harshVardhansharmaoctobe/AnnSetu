@@ -99,7 +99,18 @@ export function listResponse<T>(items: T[], total: number, page: number, pageSiz
 }
 
 /** Best-effort client IP for rate limiting and audit logs (set by the Next.js server). */
+/**
+ * The client's IP, used as a rate-limit key. X-Forwarded-For is a list that a client can pre-fill with
+ * anything, so the leftmost entry cannot be trusted; each proxy appends the address it received the
+ * request from. With TRUSTED_PROXY_HOPS proxies in front of the app (default 1: Vercel, Render), the
+ * real client address is that many entries from the right. TRUSTED_PROXY_HOPS=0 means the app is
+ * reached directly, so forwarding headers are ignored.
+ */
 export function clientIp(request: Request): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  return forwarded?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown';
+  const parsed = Number.parseInt(process.env.TRUSTED_PROXY_HOPS ?? '', 10);
+  const hops = Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 10) : 1;
+  if (hops === 0) return 'unknown';
+  const chain = (request.headers.get('x-forwarded-for') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (chain.length > 0) return chain[Math.max(0, chain.length - hops)];
+  return request.headers.get('x-real-ip')?.trim() || 'unknown';
 }

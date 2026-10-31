@@ -52,7 +52,7 @@ export async function prepareTestDatabase() {
 
   // Schema sync on the throwaway test database only (guarded above).
   execSync('npx prisma db push --skip-generate --accept-data-loss', {
-    env: { ...process.env, DATABASE_URL: url },
+    env: { ...process.env, DATABASE_URL: url, DIRECT_URL: url },
     stdio: 'pipe',
   });
 

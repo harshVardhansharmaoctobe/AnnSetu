@@ -1,7 +1,7 @@
 import prisma from '@/lib/db';
 import { requireUser } from '@/lib/api-auth';
 import { notFound, route } from '@/lib/api';
-import { CONTENT_TYPES, diskStorage, STORED_NAME_PATTERN, type ImageExtension } from '@/lib/uploads';
+import { CONTENT_TYPES, STORED_NAME_PATTERN, uploadStorage, type ImageExtension } from '@/lib/uploads';
 
 export const dynamic = 'force-dynamic';
 
@@ -14,7 +14,7 @@ export const GET = route<{ name: string }>('uploads:get', async (_request, { nam
   const meta = await prisma.upload.findUnique({ where: { fileName: name }, select: { id: true } });
   if (!meta) throw notFound('File not found');
 
-  const data = await diskStorage.read(name);
+  const data = await uploadStorage().read(name);
   if (!data) throw notFound('File not found');
   const ext = name.split('.').pop() as ImageExtension;
 

@@ -13,9 +13,14 @@ generator client {
   previewFeatures = ["postgresqlExtensions"]
 }
 
+// DATABASE_URL: runtime connection (on Neon, the pooled "-pooler" URL).
+// DIRECT_URL:   schema operations (prisma db push / migrate) – a direct, unpooled connection, because
+//               schema changes do not work reliably through a transaction-mode pooler. Locally it is the
+//               same as DATABASE_URL (the npm scripts fill it in when it is not set).
 datasource db {
   provider   = "postgresql"
   url        = env("DATABASE_URL")
+  directUrl  = env("DIRECT_URL")
   extensions = [postgis]
 }
 
@@ -409,4 +414,12 @@ model Upload {
   uploadedBy User @relation(fields: [uploadedById], references: [id], onDelete: Cascade)
 
   @@index([uploadedById, createdAt])
+}
+
+/// Image bytes when UPLOAD_STORAGE=database (the default on Vercel, whose filesystem is read-only).
+/// Kept apart from Upload so listing uploads never loads image data.
+model StoredFile {
+  fileName  String   @id // same server-generated name as Upload.fileName
+  data      Bytes
+  createdAt DateTime @default(now())
 }

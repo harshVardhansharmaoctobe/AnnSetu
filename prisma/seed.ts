@@ -167,8 +167,18 @@ async function main() {
   }
 
   // Local-only credentials sheet for the presenter (gitignored: *.local.md). Never committed or printed.
+  // SEED_CREDENTIALS_FILE=none skips it (e.g. when seeding a hosted database from this machine, so the
+  // local sheet is not overwritten); another name must end in .local.md so it stays gitignored.
+  const credentialsFile = process.env.SEED_CREDENTIALS_FILE?.trim() || 'DEMO_CREDENTIALS.local.md';
+  if (credentialsFile === 'none') {
+    console.log('\nDone. No credentials file written (SEED_CREDENTIALS_FILE=none); passwords are never printed.\n');
+    return;
+  }
+  if (!credentialsFile.endsWith('.local.md') || /[\\/]/.test(credentialsFile)) {
+    fail('SEED_CREDENTIALS_FILE must be "none" or a file name ending in .local.md (kept out of git).');
+  }
   writeFileSync(
-    'DEMO_CREDENTIALS.local.md',
+    credentialsFile,
     [
       '# FoodBridge demo credentials (LOCAL ONLY – do not commit or share)',
       '',
@@ -186,7 +196,7 @@ async function main() {
     ].join('\n'),
     { mode: 0o600 }
   );
-  console.log(`\nDone. Demo logins are in DEMO_CREDENTIALS.local.md (gitignored); passwords are never printed.${demoStatus === 'PENDING' ? '\nDemo donor/NGO/volunteer are PENDING – approve them as the admin to start the demo.' : ''}\n`);
+  console.log(`\nDone. Demo logins are in ${credentialsFile} (gitignored); passwords are never printed.${demoStatus === 'PENDING' ? '\nDemo donor/NGO/volunteer are PENDING – approve them as the admin to start the demo.' : ''}\n`);
 }
 
 main()

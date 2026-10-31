@@ -2,13 +2,14 @@ import { randomUUID } from 'crypto';
 import { mkdir, readFile, writeFile } from 'fs/promises';
 import path from 'path';
 import { badRequest } from '@/lib/api';
+import prisma from '@/lib/db';
 
 /**
  * Image uploads (donation photos, pickup/delivery proof).
  *
  * Files are identified by their bytes, never by the client's filename or MIME type, and stored
  * under a server-generated UUID name. Only JPEG/PNG/WebP are accepted; SVG is excluded because it
- * can carry scripts. Storage is behind `UploadStorage` so local disk can be swapped for S3 etc.
+ * can carry scripts. Storage is behind `UploadStorage`: local disk, or PostgreSQL (see uploadStorage()).
  */
 
 export type ImageExtension = 'jpg' | 'png' | 'webp';
@@ -25,7 +26,9 @@ export const STORED_NAME_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f
 
 export function maxUploadBytes() {
   const mb = Number.parseFloat(process.env.MAX_FILE_SIZE_MB ?? '');
-  return (Number.isFinite(mb) && mb > 0 ? Math.min(mb, 20) : 5) * 1024 * 1024;
+  // Vercel functions reject request bodies over 4.5 MB, so the default there is 4 MB.
+  const fallback = process.env.VERCEL ? 4 : 5;
+  return (Number.isFinite(mb) && mb > 0 ? Math.min(mb, 20) : fallback) * 1024 * 1024;
 }
 
 /** Detects the real image type from magic bytes. */
@@ -94,7 +97,28 @@ export const diskStorage: UploadStorage = {
   },
 };
 
-export async function storeImage(file: File, storage: UploadStorage = diskStorage) {
+/**
+ * Image bytes in PostgreSQL (StoredFile). Used on Vercel, whose filesystem is read-only and temporary,
+ * and wherever UPLOAD_STORAGE=database. Images stay behind the signed-in /api/uploads route as before.
+ */
+export const databaseStorage: UploadStorage = {
+  async save(name, data) {
+    await prisma.storedFile.create({ data: { fileName: name, data: Buffer.from(data) } });
+  },
+  async read(name) {
+    if (!STORED_NAME_PATTERN.test(name)) return null;
+    const row = await prisma.storedFile.findUnique({ where: { fileName: name }, select: { data: true } });
+    return row ? Buffer.from(row.data) : null;
+  },
+};
+
+/** UPLOAD_STORAGE=disk|database; when unset: database on Vercel, disk everywhere else. */
+export function uploadStorage(): UploadStorage {
+  const mode = process.env.UPLOAD_STORAGE?.trim().toLowerCase() || (process.env.VERCEL ? 'database' : 'disk');
+  return mode === 'database' ? databaseStorage : diskStorage;
+}
+
+export async function storeImage(file: File, storage: UploadStorage = uploadStorage()) {
   const bytes = new Uint8Array(await file.arrayBuffer());
   const ext = validateImage(file, bytes);
   const name = `${randomUUID()}.${ext}`;

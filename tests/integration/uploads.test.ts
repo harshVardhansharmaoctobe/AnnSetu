@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { Client, JPEG_HEADER, PNG_BYTES } from '../support/http';
 import { signedIn } from '../support/factories';
+import { existsSync } from 'fs';
+import path from 'path';
+import { TEST_UPLOAD_DIR } from '../support/server';
+import { testPrisma } from '../support/test-db';
 
 describe('image uploads', () => {
   it('stores a valid image under a random name and serves it safely', async () => {
@@ -14,6 +18,19 @@ describe('image uploads', () => {
     expect(file.headers.get('content-type')).toBe('image/png');
     expect(file.headers.get('x-content-type-options')).toBe('nosniff');
     expect(file.headers.get('content-security-policy')).toContain("default-src 'none'");
+  });
+
+  it('database storage (the Vercel mode): bytes live in PostgreSQL, not on the server disk', async () => {
+    const { client } = await signedIn('VOLUNTEER');
+    const res = await client.upload('proof.png', PNG_BYTES, 'image/png', 'DELIVERY_PROOF');
+    expect(res.status).toBe(201);
+    const fileName = res.data.url.split('/').pop();
+    const row = await testPrisma().storedFile.findUniqueOrThrow({ where: { fileName } });
+    expect(Buffer.from(row.data).equals(Buffer.from(PNG_BYTES))).toBe(true);
+    expect(existsSync(path.join(process.cwd(), TEST_UPLOAD_DIR, fileName))).toBe(false);
+    const served = await client.get(res.data.url);
+    expect(served.status).toBe(200);
+    expect(served.headers.get('content-length')).toBe(String(PNG_BYTES.length));
   });
 
   it('ignores a malicious client filename', async () => {

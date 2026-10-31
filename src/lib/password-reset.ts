@@ -20,7 +20,9 @@ export const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 const hashToken = (token: string) => createHash('sha256').update(token).digest('hex');
 
 export function resetUrl(token: string) {
-  const base = (process.env.NEXTAUTH_URL || 'http://localhost:3000').replace(/\/$/, '');
+  // NEXTAUTH_URL when set; on Vercel otherwise the production domain (or this deployment's URL).
+  const vercelHost = process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL;
+  const base = (process.env.NEXTAUTH_URL || (vercelHost ? `https://${vercelHost}` : 'http://localhost:3000')).replace(/\/$/, '');
   return `${base}/reset-password?token=${encodeURIComponent(token)}`;
 }
 

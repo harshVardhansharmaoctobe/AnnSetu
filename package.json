@@ -2,16 +2,18 @@
   "name": "foodbridge",
   "version": "1.0.0",
   "private": true,
-  "description": "FoodBridge – Zero-Waste Food Rescue Coordination Platform",
+  "engines": {
+    "node": "22.x"
+  },
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "prisma generate && next build",
     "start": "next start",
     "lint": "next lint",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push",
+    "db:push": "node scripts/prisma.mjs db push",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio",
+    "db:studio": "node scripts/prisma.mjs studio",
     "postinstall": "prisma generate",
     "typecheck": "tsc --noEmit",
     "test": "npm run test:unit && npm run build && npm run test:integration && npm run test:e2e",
@@ -20,6 +22,7 @@
     "test:e2e": "playwright test",
     "health": "node -e \"fetch(process.argv[1]).then(r=>r.json()).then(j=>{console.log(j);process.exit(j.status==='ok'?0:1)}).catch(e=>{console.error(e.message);process.exit(1)})\" http://localhost:3000/api/health"
   },
+  "description": "FoodBridge – Zero-Waste Food Rescue Coordination Platform",
   "dependencies": {
     "@hookform/resolvers": "^3.9.0",
     "@prisma/client": "^5.19.0",
