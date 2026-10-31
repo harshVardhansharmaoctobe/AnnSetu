@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { KeyRound, LogOut } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { PageHeader, Spinner, StatusBadge, humanize } from '@/components/states';
 import { useToast } from '@/components/toaster';
@@ -57,9 +57,9 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           <form onSubmit={change} className="max-w-md space-y-4">
-            <div className="space-y-1.5"><Label htmlFor="currentPassword">Current password</Label><Input id="currentPassword" type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} /></div>
-            <div className="space-y-1.5"><Label htmlFor="newPassword">New password</Label><Input id="newPassword" type="password" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></div>
-            <div className="space-y-1.5"><Label htmlFor="confirmNewPassword">Confirm new password</Label><Input id="confirmNewPassword" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label htmlFor="currentPassword">Current password</Label><PasswordInput id="currentPassword" autoComplete="current-password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label htmlFor="newPassword">New password</Label><PasswordInput id="newPassword" autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} /></div>
+            <div className="space-y-1.5"><Label htmlFor="confirmNewPassword">Confirm new password</Label><PasswordInput id="confirmNewPassword" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} /></div>
             {error && <p className="rounded-md bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
             <Button type="submit" disabled={busy}>{busy && <Spinner className="mr-2" />} Change password</Button>
           </form>

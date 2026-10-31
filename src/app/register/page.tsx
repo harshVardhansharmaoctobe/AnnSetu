@@ -8,8 +8,9 @@ import { Building2, HandHeart, Truck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
-import { PublicHeader } from '@/components/public-chrome';
+import { AuthShell } from '@/components/auth-shell';
 import { Spinner } from '@/components/states';
 import { api, type ApiClientError } from '@/lib/client';
 import { cn } from '@/lib/utils';
@@ -64,9 +65,7 @@ export default function RegisterPage() {
   );
 
   return (
-    <div className="min-h-screen gradient-hero">
-      <PublicHeader />
-      <main className="flex justify-center px-4 py-12">
+    <AuthShell>
         <Card className="w-full max-w-lg shadow-md border-green-100">
           <CardHeader>
             <CardTitle className="text-2xl font-bold">Join FoodBridge</CardTitle>
@@ -102,8 +101,8 @@ export default function RegisterPage() {
               {field('email', 'Email', <Input id="email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="e.g. rahul@example.com" />)}
               {field('phone', 'Phone (optional)', <Input id="phone" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={20} placeholder="+91 98765 43210" />)}
               <div className="grid gap-4 sm:grid-cols-2">
-                {field('password', 'Password', <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" />)}
-                {field('confirmPassword', 'Confirm password', <Input id="confirmPassword" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Repeat password" />)}
+                {field('password', 'Password', <PasswordInput id="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min 8 characters" />)}
+                {field('confirmPassword', 'Confirm password', <PasswordInput id="confirmPassword" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Repeat password" />)}
               </div>
               <p className="text-xs text-muted-foreground">Passwords must be at least 8 characters long.</p>
               {formError && <p className="rounded-md bg-red-50 p-3 text-sm text-red-800" role="alert">{formError}</p>}
@@ -125,7 +124,6 @@ export default function RegisterPage() {
             </div>
           </CardContent>
         </Card>
-      </main>
-    </div>
+      </AuthShell>
   );
 }

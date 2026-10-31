@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ErrorState, LoadingCards, PageHeader, Spinner, StatusBadge, humanize } from '@/components/states';
+import { MapView } from '@/components/map-view';
 import { useToast } from '@/components/toaster';
 import { api, useApi, type ApiClientError } from '@/lib/client';
 import { formatDateTime, formatTimeRemaining } from '@/lib/utils';
@@ -18,6 +19,7 @@ interface Detail {
   id: string; foodName: string; description: string | null; foodCategory: string; foodType: string;
   quantity: number; remainingQuantity: number; unit: string; preparationTime: string; safePickupDeadline: string;
   storageConditions: string; handlingInstructions: string | null; photoUrl: string | null; pickupAddress: string;
+  latitude: number; longitude: number;
   status: string; donorProfile: { organisationName: string; organisationType: string };
   myRequest: { id: string; status: string; requestedQuantity: number } | null;
 }
@@ -81,7 +83,7 @@ export default function NgoDonationDetail() {
             <div><dt className="text-muted-foreground">Pick up by</dt><dd className="font-medium"><Clock className="mr-1 inline h-3.5 w-3.5" />{formatDateTime(d.safePickupDeadline)} ({formatTimeRemaining(d.safePickupDeadline)})</dd></div>
             <div><dt className="text-muted-foreground">Prepared</dt><dd>{formatDateTime(d.preparationTime)}</dd></div>
             <div><dt className="text-muted-foreground">Storage</dt><dd>{d.storageConditions}</dd></div>
-            <div className="sm:col-span-2"><dt className="text-muted-foreground">Pickup location</dt><dd><MapPin className="mr-1 inline h-3.5 w-3.5" />{d.pickupAddress}</dd></div>
+            <div className="sm:col-span-2"><dt className="text-muted-foreground">Pickup location</dt><dd data-testid="pickup-address"><MapPin className="mr-1 inline h-3.5 w-3.5" />{d.pickupAddress}</dd></div>
             {d.handlingInstructions && <div className="sm:col-span-2"><dt className="text-muted-foreground">Handling</dt><dd>{d.handlingInstructions}</dd></div>}
             {d.description && <div className="sm:col-span-2"><dt className="text-muted-foreground">Description</dt><dd>{d.description}</dd></div>}
           </dl>
@@ -91,6 +93,12 @@ export default function NgoDonationDetail() {
           )}
         </CardContent>
       </Card>
+
+      <MapView
+        className="h-64"
+        label="Pickup location map"
+        markers={[{ id: 'pickup', lat: d.latitude, lng: d.longitude, title: `Pickup: ${d.donorProfile.organisationName}`, subtitle: d.pickupAddress, tone: 'green' }]}
+      />
 
       {d.myRequest && d.myRequest.status !== 'CANCELLED' ? (
         <Card>

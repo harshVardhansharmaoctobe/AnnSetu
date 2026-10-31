@@ -130,9 +130,22 @@ const donationFields = z.object({
 });
 
 function checkDonationDates(
-  data: { preparationTime?: Date; safePickupDeadline?: Date },
+  data: { preparationTime?: Date; safePickupDeadline?: Date; pickupAddress?: string; latitude?: number; longitude?: number },
   ctx: z.RefinementCtx
 ) {
+  // The pickup address and its pin are one location: an edit must send all three together, so a new
+  // pin can never be saved next to the old address (or the reverse). 0,0 is a placeholder, not a place.
+  const locationKeys = ['pickupAddress', 'latitude', 'longitude'] as const;
+  const sent = locationKeys.filter((k) => data[k] !== undefined);
+  if (sent.length > 0 && sent.length < 3) {
+    for (const k of locationKeys.filter((k) => data[k] === undefined)) {
+      ctx.addIssue({ code: 'custom', path: [k], message: 'Send the pickup address together with its latitude and longitude' });
+    }
+  }
+  if (data.latitude === 0 && data.longitude === 0) {
+    ctx.addIssue({ code: 'custom', path: ['latitude'], message: 'Set the pickup location on the map' });
+  }
+
   const now = Date.now();
   if (data.preparationTime && data.preparationTime.getTime() > now + CLOCK_SKEW_MS) {
     ctx.addIssue({ code: 'custom', path: ['preparationTime'], message: 'Preparation time cannot be in the future' });

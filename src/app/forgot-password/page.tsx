@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { PublicHeader } from '@/components/public-chrome';
+import { AuthShell } from '@/components/auth-shell';
 import { Spinner } from '@/components/states';
 import { api, type ApiClientError } from '@/lib/client';
 
@@ -32,9 +32,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen gradient-hero">
-      <PublicHeader />
-      <main className="flex justify-center px-4 py-16">
+    <AuthShell>
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-2xl">Forgot your password?</CardTitle>
@@ -64,7 +62,6 @@ export default function ForgotPasswordPage() {
             )}
           </CardContent>
         </Card>
-      </main>
-    </div>
+      </AuthShell>
   );
 }

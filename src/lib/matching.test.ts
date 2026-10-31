@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { calculateImpact, calculateMatchScore, IMPACT_ESTIMATES } from './matching';
-import { calculateDistance } from './utils';
+import { areaOf, calculateDistance } from './utils';
 
 describe('calculateDistance', () => {
   it('is zero for the same point and symmetric', () => {
@@ -43,5 +43,15 @@ describe('calculateMatchScore', () => {
     const far = calculateMatchScore({ ...base, ngo: { ...base.ngo, latitude: 27.3 } });
     expect(far.totalScore).toBeLessThan(calculateMatchScore(base).totalScore);
     expect(far.distanceScore).toBe(0);
+  });
+});
+
+
+describe('areaOf', () => {
+  it('keeps the neighbourhood and city only', () => {
+    expect(areaOf('12, Shipra Path, Mansarovar, Jaipur, Rajasthan 302020, India')).toBe('Mansarovar, Jaipur');
+    expect(areaOf('Vaishali Nagar, Jaipur, Rajasthan')).toBe('Vaishali Nagar, Jaipur');
+    expect(areaOf('C-Scheme, Jaipur - 302001')).toBe('C-Scheme, Jaipur');
+    expect(areaOf('Jaipur')).toBe('Jaipur');
   });
 });

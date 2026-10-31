@@ -6,9 +6,9 @@ import { Suspense, useState } from 'react';
 import { CheckCircle2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
-import { PublicHeader } from '@/components/public-chrome';
+import { AuthShell } from '@/components/auth-shell';
 import { Spinner } from '@/components/states';
 import { api, type ApiClientError } from '@/lib/client';
 
@@ -53,11 +53,11 @@ function ResetForm() {
     <form onSubmit={submit} className="space-y-4">
       <div className="space-y-1.5">
         <Label htmlFor="password">New password</Label>
-        <Input id="password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+        <PasswordInput id="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
       </div>
       <div className="space-y-1.5">
         <Label htmlFor="confirmPassword">Confirm new password</Label>
-        <Input id="confirmPassword" type="password" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+        <PasswordInput id="confirmPassword" autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
       </div>
       {error && (
         <p className="rounded-md bg-red-50 p-3 text-sm text-red-800" role="alert">
@@ -71,9 +71,7 @@ function ResetForm() {
 
 export default function ResetPasswordPage() {
   return (
-    <div className="min-h-screen gradient-hero">
-      <PublicHeader />
-      <main className="flex justify-center px-4 py-16">
+    <AuthShell>
         <Card className="w-full max-w-md">
           <CardHeader>
             <CardTitle className="text-2xl">Choose a new password</CardTitle>
@@ -81,7 +79,6 @@ export default function ResetPasswordPage() {
           </CardHeader>
           <CardContent><Suspense fallback={<Spinner />}><ResetForm /></Suspense></CardContent>
         </Card>
-      </main>
-    </div>
+      </AuthShell>
   );
 }

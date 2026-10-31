@@ -60,7 +60,7 @@ export default function AdminDonationDetail() {
           <CardContent className="space-y-1 text-sm">
             <Link href={`/dashboard/admin/users/${d.donorProfile.user.id}`} className="font-medium hover:underline">{d.donorProfile.organisationName}</Link>
             <p className="text-muted-foreground">{d.donorProfile.user.name} · {d.donorProfile.user.email}{d.donorProfile.user.phone && ` · ${d.donorProfile.user.phone}`}</p>
-            <p>{d.pickupAddress}</p>
+            <p data-testid="pickup-address">{d.pickupAddress}</p>
           </CardContent>
         </Card>
         <Card>

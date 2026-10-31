@@ -8,8 +8,9 @@ import { LogIn } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
-import { PublicHeader } from '@/components/public-chrome';
+import { AuthShell } from '@/components/auth-shell';
 import { Spinner } from '@/components/states';
 
 const KNOWN_ERRORS = new Set([
@@ -70,7 +71,7 @@ function LoginForm() {
               <Label htmlFor="password">Password</Label>
               <Link href="/forgot-password" className="text-xs text-green-700 hover:underline">Forgot password?</Link>
             </div>
-            <Input id="password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+            <PasswordInput id="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           {error && <p className="rounded-md bg-red-50 p-3 text-sm text-red-800" role="alert">{error}</p>}
           <Button type="submit" className="w-full" size="lg" disabled={busy}>
@@ -87,11 +88,8 @@ function LoginForm() {
 
 export default function LoginPage() {
   return (
-    <div className="min-h-screen gradient-hero">
-      <PublicHeader />
-      <main className="flex justify-center px-4 py-16">
+    <AuthShell>
         <Suspense fallback={<Spinner />}><LoginForm /></Suspense>
-      </main>
-    </div>
+      </AuthShell>
   );
 }

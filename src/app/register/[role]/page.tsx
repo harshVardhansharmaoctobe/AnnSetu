@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation';
-import { PublicHeader } from '@/components/public-chrome';
+import { AuthShell } from '@/components/auth-shell';
 import { RegistrationForm, type RegistrationRole } from '@/components/registration-form';
 
 const ROLE_BY_SLUG: Record<string, RegistrationRole> = { donor: 'DONOR', ngo: 'NGO', volunteer: 'VOLUNTEER' };
@@ -10,11 +10,8 @@ export default async function RegisterRolePage({ params }: { params: Promise<{ r
   const mapped = ROLE_BY_SLUG[role];
   if (!mapped) notFound();
   return (
-    <div className="min-h-screen gradient-hero">
-      <PublicHeader />
-      <main className="flex justify-center px-4 py-10">
+    <AuthShell wide>
         <RegistrationForm role={mapped} />
-      </main>
-    </div>
+      </AuthShell>
   );
 }

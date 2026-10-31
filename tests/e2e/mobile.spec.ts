@@ -18,7 +18,7 @@ test('landing page fits a phone screen without horizontal scrolling', async ({ p
 test('dashboard navigation works through the mobile menu', async ({ page }) => {
   await page.goto('/login');
   await page.getByLabel('Email').fill(fixture().adminEmail);
-  await page.getByLabel('Password').fill(fixture().adminPassword);
+  await page.getByLabel('Password', { exact: true }).fill(fixture().adminPassword);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL(/\/dashboard\/admin/);
 

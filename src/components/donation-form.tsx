@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { NativeSelect } from '@/components/ui/native-select';
 import { LocationPicker, type LocationValue } from '@/components/location-picker';
+import { debugLocation } from '@/lib/location-debug';
 import { ImageUpload } from '@/components/image-upload';
 import { Spinner } from '@/components/states';
 import { FOOD_CATEGORIES, FOOD_TYPES, QUANTITY_UNITS } from '@/lib/constants';
@@ -93,6 +94,7 @@ export function DonationForm({
     }
 
     setBusy(true);
+    debugLocation('sending to backend', { pickupAddress: location.address.trim(), latitude: location.latitude, longitude: location.longitude });
     try {
       await onSubmit({
         foodName: foodName.trim(),

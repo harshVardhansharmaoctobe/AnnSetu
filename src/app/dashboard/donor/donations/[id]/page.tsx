@@ -129,7 +129,7 @@ export default function DonorDonationDetail() {
             <div><dt className="text-muted-foreground">Pickup deadline</dt><dd className="font-medium"><Clock className="mr-1 inline h-3.5 w-3.5" />{formatDateTime(d.safePickupDeadline)} · {formatTimeRemaining(d.safePickupDeadline)}</dd></div>
             <div><dt className="text-muted-foreground">Prepared</dt><dd>{formatDateTime(d.preparationTime)}</dd></div>
             <div><dt className="text-muted-foreground">Storage</dt><dd>{d.storageConditions}</dd></div>
-            <div className="sm:col-span-2"><dt className="text-muted-foreground">Pickup address</dt><dd><MapPin className="mr-1 inline h-3.5 w-3.5" />{d.pickupAddress}</dd></div>
+            <div className="sm:col-span-2"><dt className="text-muted-foreground">Pickup address</dt><dd data-testid="pickup-address"><MapPin className="mr-1 inline h-3.5 w-3.5" />{d.pickupAddress}</dd></div>
             {d.handlingInstructions && <div className="sm:col-span-2"><dt className="text-muted-foreground">Handling</dt><dd>{d.handlingInstructions}</dd></div>}
             {d.description && <div className="sm:col-span-2"><dt className="text-muted-foreground">Description</dt><dd>{d.description}</dd></div>}
           </dl>

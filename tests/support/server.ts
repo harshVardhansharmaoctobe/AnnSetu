@@ -2,6 +2,7 @@ import { spawn, type ChildProcess } from 'child_process';
 import { existsSync, rmSync } from 'fs';
 import path from 'path';
 import { testDatabaseUrl } from './test-db';
+import { startGeocoderStub } from './geocoder-stub';
 
 export const TEST_UPLOAD_DIR = '.test-uploads';
 
@@ -14,6 +15,8 @@ export async function startServer(port: number, extraEnv: Record<string, string>
     throw new Error('No production build found – run `npm run build` before the integration/E2E tests.');
   }
   rmSync(path.join(process.cwd(), TEST_UPLOAD_DIR), { recursive: true, force: true });
+  // Address lookups go to a local stub on port+1, never to the real OpenStreetMap service.
+  const geocoder = await startGeocoderStub(port + 1);
 
   const child: ChildProcess = spawn(
     process.execPath,
@@ -30,6 +33,8 @@ export async function startServer(port: number, extraEnv: Record<string, string>
         UPLOAD_RATE_LIMIT: '1000',
         LOGIN_MAX_FAILURES: '5',
         NEXT_TELEMETRY_DISABLED: '1',
+        GEOCODER_URL: geocoder.url,
+        GEOCODE_RATE_LIMIT: '1000',
         ...extraEnv,
       },
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -45,13 +50,16 @@ export async function startServer(port: number, extraEnv: Record<string, string>
     if (child.exitCode !== null) throw new Error(`Test server exited early:\n${output}`);
     try {
       const res = await fetch(`${base}/api/health`);
-      if (res.ok) return { base, stop: () => stopServer(child), logs: () => output };
+      if (res.ok) {
+        return { base, geocoderUrl: geocoder.url, stop: async () => { await stopServer(child); await geocoder.stop(); }, logs: () => output };
+      }
     } catch {
       /* not up yet */
     }
     await new Promise((r) => setTimeout(r, 500));
   }
   child.kill();
+  await geocoder.stop();
   throw new Error(`Test server did not become healthy in 60s:\n${output}`);
 }
 

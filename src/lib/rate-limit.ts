@@ -71,6 +71,7 @@ const globalLimiters = globalThis as unknown as {
     registration: ReturnType<typeof createRateLimiter>;
     uploads: ReturnType<typeof createRateLimiter>;
     passwordReset: ReturnType<typeof createRateLimiter>;
+    geocoding: ReturnType<typeof createRateLimiter>;
   };
 };
 
@@ -84,4 +85,6 @@ export const limiters = (globalLimiters.foodbridgeLimiters ??= {
   uploads: createRateLimiter({ limit: envInt('UPLOAD_RATE_LIMIT', 60), windowMs: 60 * 60_000 }),
   // Forgot-password requests per client IP and per email.
   passwordReset: createRateLimiter({ limit: envInt('PASSWORD_RESET_RATE_LIMIT', 5), windowMs: 60 * 60_000 }),
+  // Address lookups per client IP (each also waits its turn in the 1 request/second geocoder queue).
+  geocoding: createRateLimiter({ limit: envInt('GEOCODE_RATE_LIMIT', 60), windowMs: 10 * 60_000 }),
 });

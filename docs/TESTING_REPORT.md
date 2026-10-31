@@ -19,6 +19,15 @@ slow down for several minutes (`auth.test.ts` 420 s, `requests.test.ts` 242 s wi
 PostgreSQL logged no errors, the same code then passed 123/123 in 83 s, and it was not reproduced again.
 Root cause not identified; the machine's C: drive (which holds Docker's data) was nearly full at the time.
 
+### Location accuracy (address ↔ map pin)
+
+| Check | Result |
+|---|---|
+| Unit: address formatting from real Nominatim responses, reverse-distance rule | 40/40 unit tests |
+| Integration: exact coordinates round-trip (no swap) for donor/NGO/admin, edits replace address+pin together, 0,0 and out-of-range rejected | 132/132 integration tests |
+| E2E (stub geocoder, every run): search, map click, marker drag, failed lookup, save, reload, edit, NGO + admin views | passed |
+| E2E against the **real** OpenStreetMap geocoder (`REAL_GEOCODER=1 PW_CHANNEL=chrome npx playwright test real-locations`): Mansarovar, Hawa Mahal, Jaipur Railway Station, World Trade Park + a real map click | passed – address names the place, pin within 0.02–1.1 km of independent reference points, identical after save, reload and on NGO/admin pages |
+
 Sections below describe the earlier baseline.
 
 All results below were produced by actually running the suites on 2026-10-31 (re-run after the final

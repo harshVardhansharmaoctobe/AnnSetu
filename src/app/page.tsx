@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { PublicFooter, PublicHeader } from '@/components/public-chrome';
 import { getImpactStats } from '@/lib/stats';
 import prisma from '@/lib/db';
+import { areaOf } from '@/lib/utils';
 
 // Rendered per request so the stats are live (and the build never needs a database).
 export const dynamic = 'force-dynamic';
@@ -34,7 +35,7 @@ async function loadFeatured() {
       orderBy: { createdAt: 'desc' },
       take: 6,
       select: {
-        id: true, foodName: true, foodCategory: true, foodType: true, remainingQuantity: true, unit: true, safePickupDeadline: true,
+        id: true, foodName: true, pickupAddress: true, foodCategory: true, foodType: true, remainingQuantity: true, unit: true, safePickupDeadline: true,
         donorProfile: { select: { organisationName: true, user: { select: { isDemo: true } } } },
       },
     });
@@ -179,7 +180,7 @@ export default async function LandingPage() {
                     <h3 className="font-semibold">{d.foodName}</h3>
                     {d.donorProfile.user.isDemo && <span className="shrink-0 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Demo listing</span>}
                   </div>
-                  <p className="text-sm text-muted-foreground">{d.donorProfile.organisationName}</p>
+                  <p className="text-sm text-muted-foreground">{d.donorProfile.organisationName} · {areaOf(d.pickupAddress)}</p>
                   <p className="mt-3 text-sm">
                     <span className="font-semibold">{fmt(d.remainingQuantity)} {d.unit === 'MEALS' ? 'meals' : 'kg'}</span> available ·{' '}
                     {d.foodCategory.toLowerCase().replace(/_/g, ' ')} · {d.foodType.toLowerCase().replace(/_/g, '-')}

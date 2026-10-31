@@ -11,7 +11,7 @@ import { MapView, type MapMarker } from '@/components/map-view';
 import { EmptyState, ErrorState, LoadingCards, PageHeader, Pagination, StatusBadge, humanize } from '@/components/states';
 import { useApi, useQueryParam, toQuery } from '@/lib/client';
 import { FOOD_CATEGORIES, FOOD_TYPES } from '@/lib/constants';
-import { formatTimeRemaining } from '@/lib/utils';
+import { areaOf, formatTimeRemaining } from '@/lib/utils';
 
 interface Donation {
   id: string; foodName: string; foodCategory: string; foodType: string; remainingQuantity: number; unit: string;
@@ -157,7 +157,7 @@ function BrowsePage() {
                       <p className="font-semibold">{d.foodName}</p>
                       {d.myRequest && <StatusBadge status={d.myRequest.status} />}
                     </div>
-                    <p className="text-sm text-muted-foreground">{d.donorProfile.organisationName}</p>
+                    <p className="text-sm text-muted-foreground">{d.donorProfile.organisationName} · {areaOf(d.pickupAddress)}</p>
                     <p className="mt-2 text-sm">{d.remainingQuantity} {d.unit.toLowerCase()} · {humanize(d.foodCategory)} · {humanize(d.foodType)}</p>
                     <div className="mt-auto flex flex-wrap gap-x-4 gap-y-1 pt-3 text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-1"><Clock className="h-3.5 w-3.5" /> {formatTimeRemaining(d.safePickupDeadline)}</span>

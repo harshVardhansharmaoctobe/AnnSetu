@@ -5,6 +5,7 @@ import { badRequest, conflict, forbidden, notFound } from '@/lib/api';
 import { audit, notify, notifyAdmins } from '@/lib/events';
 import { calculateImpact } from '@/lib/matching';
 import { calculateDistance } from '@/lib/utils';
+import { debugLocation } from '@/lib/location-debug';
 import type {
   DonationCreateInput,
   DonationUpdateInput,
@@ -131,6 +132,7 @@ export async function createDonation(actor: Actor, input: DonationCreateInput) {
       data: { ...input, donorProfileId: profile.id, remainingQuantity: input.quantity, status: 'AVAILABLE' },
     });
     await audit(tx, { userId: actor.id, action: 'DONATION_CREATED', entity: 'FoodDonation', entityId: donation.id });
+    debugLocation('saved donation', { id: donation.id, pickupAddress: donation.pickupAddress, latitude: donation.latitude, longitude: donation.longitude });
     return donation;
   });
 }
@@ -173,7 +175,9 @@ export async function updateDonation(actor: Actor, donationId: string, input: Do
     });
     if (updated.count === 0) throw conflict('The donation changed while you were editing; reload and try again');
     await audit(tx, { userId: actor.id, action: 'DONATION_UPDATED', entity: 'FoodDonation', entityId: donationId });
-    return tx.foodDonation.findUniqueOrThrow({ where: { id: donationId } });
+    const saved = await tx.foodDonation.findUniqueOrThrow({ where: { id: donationId } });
+    debugLocation('updated donation', { id: saved.id, pickupAddress: saved.pickupAddress, latitude: saved.latitude, longitude: saved.longitude });
+    return saved;
   });
 }
 

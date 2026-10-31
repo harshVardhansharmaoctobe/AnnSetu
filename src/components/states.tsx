@@ -7,7 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import { cn, getStatusColor } from '@/lib/utils';
 
 export function humanize(value: string) {
-  return value.toLowerCase().replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+  return value
+    .toLowerCase()
+    .replace(/_/g, ' ')
+    .replace(/^\w/, (c) => c.toUpperCase())
+    .replace(/\bngo(s?)\b/gi, 'NGO$1'); // keep the acronym: "NGO dashboard", not "Ngo dashboard"
 }
 
 export function StatusBadge({ status, className }: { status: string; className?: string }) {

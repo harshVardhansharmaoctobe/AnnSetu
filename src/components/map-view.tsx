@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import 'leaflet/dist/leaflet.css';
 import type { Map as LeafletMap, LayerGroup } from 'leaflet';
+import { debugLocation } from '@/lib/location-debug';
 
 export type MarkerTone = 'green' | 'blue' | 'amber' | 'red';
 
@@ -17,6 +18,13 @@ export interface MapMarker {
 }
 
 const LEGEND_COLORS: Record<MarkerTone, string> = { green: '#16a34a', blue: '#2563eb', amber: '#d97706', red: '#dc2626' };
+
+/** Records the exact position a marker was given, so tests and debugging can compare it with saved data. */
+function tagPosition(el: HTMLElement | undefined, lat: number, lng: number) {
+  if (!el) return;
+  el.dataset.lat = String(lat);
+  el.dataset.lng = String(lng);
+}
 
 /** Rejects missing, out-of-range and placeholder (0,0) coordinates instead of drawing them in the wrong place. */
 export function hasValidCoords(lat: unknown, lng: unknown): boolean {
@@ -111,15 +119,26 @@ export function MapView({
         sub.style.color = '#64748b';
         popup.appendChild(sub);
       }
-      L.marker([mk.lat, mk.lng], { icon: icon(mk.tone ?? 'green'), title: mk.title, alt: mk.title, keyboard: true })
+      // Leaflet takes [latitude, longitude].
+      const marker = L.marker([mk.lat, mk.lng], { icon: icon(mk.tone ?? 'green'), title: mk.title, alt: mk.title, keyboard: true })
         .bindPopup(popup)
         .addTo(layer.current);
+      tagPosition(marker.getElement(), mk.lat, mk.lng);
       points.push([mk.lat, mk.lng]);
     }
     if (picked && hasValidCoords(picked.lat, picked.lng)) {
-      L.marker([picked.lat, picked.lng], { icon: icon('red'), title: 'Selected location', keyboard: false }).addTo(layer.current);
+      const draggable = Boolean(pickRef.current);
+      const marker = L.marker([picked.lat, picked.lng], { icon: icon('red'), title: 'Selected location', keyboard: false, draggable }).addTo(layer.current);
+      tagPosition(marker.getElement(), picked.lat, picked.lng);
+      if (draggable) {
+        marker.on('dragend', () => {
+          const pos = marker.getLatLng();
+          pickRef.current?.({ lat: +pos.lat.toFixed(6), lng: +pos.lng.toFixed(6) });
+        });
+      }
       points.push([picked.lat, picked.lng]);
     }
+    debugLocation('map received', { markers: valid.map((m) => ({ title: m.title, lat: m.lat, lng: m.lng })), picked });
     const routePoints = (route ?? []).filter((p) => hasValidCoords(p.lat, p.lng));
     if (routePoints.length >= 2) {
       L.polyline(routePoints.map((p) => [p.lat, p.lng] as [number, number]), { color: '#2563eb', weight: 3, dashArray: '6 6', opacity: 0.8 })

@@ -22,8 +22,12 @@ export default async function globalSetup() {
   mkdirSync('test-results', { recursive: true });
   writeFileSync(FIXTURE_FILE, JSON.stringify({ adminEmail: admin.email, adminPassword }));
 
-  const server = await startServer(3200);
+  // REAL_GEOCODER=1: use the real OpenStreetMap geocoder (empty GEOCODER_URL = default) instead of the local stub,
+  // with location debug logging; the server log is written to test-results/server.log for diagnosis.
+  const real = process.env.REAL_GEOCODER === '1';
+  const server = await startServer(3200, real ? { GEOCODER_URL: '', LOCATION_DEBUG: 'true' } : {});
   return async () => {
+    if (real) writeFileSync('test-results/server.log', server.logs());
     await server.stop();
   };
 }

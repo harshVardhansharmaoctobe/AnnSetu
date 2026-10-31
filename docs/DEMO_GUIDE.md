@@ -47,6 +47,10 @@ landing page shows no listings (only approved donors' food is public) and the de
 1. **Landing page** – `http://localhost:3000`: tagline *From Surplus to Served*, how it works, live impact.
 2. **Admin approves accounts** – sign in as admin → *Command center* → *Accounts awaiting approval* → **Approve**
    the donor, NGO and volunteer. Show *Users* (click a name for the user detail page) and the per-role totals.
+   *Locations:* users never type coordinates. In *Profile* (or registration) they search for the address
+   (e.g. "Mansarovar, Jaipur") → **Find** → pick the match, or press **My location** / click the map and the
+   readable address is filled in. Addresses, not coordinates, are shown everywhere; cards and the public landing
+   page show only the area (e.g. "Mansarovar, Jaipur"). Address search needs internet access (OpenStreetMap).
 3. **Donor lists 50 portions** – sign in as the donor → *Add food donation* → title, **Quantity 50**, unit Meals,
    storage, handling instructions, add a photo, tick the food-safety declaration → **Publish donation**.
    The pickup location comes from the donor profile. The landing page now shows it under *Food available right now*.
@@ -89,4 +93,6 @@ suspending a user (signed out immediately), mobile layout.
 | *Discover food* is empty | Demo donations expire after their deadline; run `npm run db:seed` again |
 | "Too many failed sign-in attempts" | Wait 15 minutes, or restart the server (limits are in memory) |
 | Map tiles are grey | No internet access; markers, lists, distances and all actions still work |
+| Address and pin look different | Search again and pick the result, or drag the pin: the address always follows the pin. Debug: `localStorage.fbLocationDebug = '1'` in the browser console |
+| "Address lookup is unavailable" | No internet access to OpenStreetMap: type the address and click the map to place the pin |
 | Forgot-password link not received | No email service in this MVP: the admin issues a link from the user detail page |

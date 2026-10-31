@@ -83,3 +83,23 @@ export function getStatusColor(status: string): string {
   };
   return colors[status] || 'bg-gray-100 text-gray-800';
 }
+
+const INDIAN_STATES = new Set([
+  'andhra pradesh', 'arunachal pradesh', 'assam', 'bihar', 'chhattisgarh', 'goa', 'gujarat', 'haryana', 'himachal pradesh',
+  'jharkhand', 'karnataka', 'kerala', 'madhya pradesh', 'maharashtra', 'manipur', 'meghalaya', 'mizoram', 'nagaland', 'odisha',
+  'punjab', 'rajasthan', 'sikkim', 'tamil nadu', 'telangana', 'tripura', 'uttar pradesh', 'uttarakhand', 'west bengal',
+  'andaman and nicobar islands', 'chandigarh', 'dadra and nagar haveli and daman and diu', 'delhi', 'jammu and kashmir',
+  'ladakh', 'lakshadweep', 'puducherry',
+]);
+
+/**
+ * Short area label from a full address, for cards and public pages that should not show the street:
+ * "12, Shipra Path, Mansarovar, Jaipur, Rajasthan 302020, India" → "Mansarovar, Jaipur".
+ */
+export function areaOf(address: string): string {
+  const parts = address
+    .split(',')
+    .map((p) => p.trim().replace(/\s*[-–]?\s*\b\d{6}\b/, '').trim())
+    .filter((p) => p && !/^india$/i.test(p) && !INDIAN_STATES.has(p.toLowerCase()) && !/^\d+[a-z]?$/i.test(p));
+  return parts.slice(-2).join(', ') || address.trim();
+}

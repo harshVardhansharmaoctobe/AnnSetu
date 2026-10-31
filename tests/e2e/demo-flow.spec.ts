@@ -13,8 +13,8 @@ const people = {
 };
 const FOOD = `E2E Veg Biryani ${run}`;
 
-async function newPage(browser: Browser) {
-  const context = await browser.newContext();
+async function newPage(browser: Browser, geolocation?: { latitude: number; longitude: number }) {
+  const context = await browser.newContext(geolocation ? { geolocation, permissions: ['geolocation'] } : {});
   // Map tiles are external; block them so the test never depends on the internet.
   await context.route('https://*.tile.openstreetmap.org/**', (route) => route.abort());
   return context.newPage();
@@ -23,7 +23,7 @@ async function newPage(browser: Browser) {
 async function login(page: Page, email: string, password: string) {
   await page.goto('/login');
   await page.getByLabel('Email').fill(email);
-  await page.getByLabel('Password').fill(password);
+  await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in' }).click();
   await page.waitForURL(/\/dashboard\//);
 }
@@ -40,23 +40,28 @@ async function register(page: Page, role: 'DONOR' | 'NGO' | 'VOLUNTEER', who: { 
   await page.waitForURL('**/dashboard/profile');
 }
 
-async function setLocation(page: Page, address: string, lat: number, lng: number) {
-  await page.locator('#loc-address').fill(address);
-  await page.getByLabel('Latitude').fill(String(lat));
-  await page.getByLabel('Longitude').fill(String(lng));
+/** Address search as a user does it: type, Find, pick the match. The server's geocoder is a local stub. */
+async function setLocation(page: Page, query: string, expectedAddress: string) {
+  await page.getByLabel('Find the address').fill(query);
+  await page.getByRole('button', { name: 'Find', exact: true }).click();
+  await page.getByTestId('address-result').filter({ hasText: expectedAddress }).click();
+  await expect(page.locator('#loc-address')).toHaveValue(expectedAddress);
+  await expect(page.getByTestId('loc-pinned')).toBeVisible();
+  // No raw coordinates in the visible text (the manual-entry fields are inputs inside a closed <details>).
+  await expect(page.getByTestId('loc-picker')).not.toContainText(/\b26\.\d{3,}/);
 }
 
 test('full food rescue: registration → approval → donation → request → delivery → impact', async ({ browser }) => {
   const { adminEmail, adminPassword } = fixture();
   const donor = await newPage(browser);
   const ngo = await newPage(browser);
-  const volunteer = await newPage(browser);
+  const volunteer = await newPage(browser, { latitude: 26.9116, longitude: 75.7431 }); // Vaishali Nagar
   const admin = await newPage(browser);
 
   await test.step('donor, NGO and volunteer register and complete their profiles', async () => {
     await register(donor, 'DONOR', people.donor);
     await donor.getByLabel('Organisation / business name').fill(people.donor.org);
-    await setLocation(donor, 'Mansarovar, Jaipur, Rajasthan', 26.8505, 75.7646);
+    await setLocation(donor, 'Mansarovar', '12, Shipra Path, Mansarovar, Jaipur, Rajasthan 302020, India');
     await donor.getByTestId('avatar-photo').setInputFiles({ name: 'me.png', mimeType: 'image/png', buffer: PNG });
     await expect(donor.getByAltText('Uploaded')).toBeVisible();
     await donor.getByRole('button', { name: 'Save profile' }).click();
@@ -66,12 +71,15 @@ test('full food rescue: registration → approval → donation → request → d
 
     await register(ngo, 'NGO', people.ngo);
     await ngo.getByLabel('NGO name').fill(people.ngo.org);
-    await setLocation(ngo, 'Malviya Nagar, Jaipur, Rajasthan', 26.8553, 75.8057);
+    await setLocation(ngo, 'Malviya Nagar Jaipur', 'JLN Marg, Malviya Nagar, Jaipur, Rajasthan 302017, India');
     await ngo.getByRole('button', { name: 'Save profile' }).click();
     await expect(ngo.getByText('Profile saved')).toBeVisible();
 
     await register(volunteer, 'VOLUNTEER', people.volunteer);
-    await setLocation(volunteer, 'C-Scheme, Jaipur, Rajasthan', 26.9012, 75.7985);
+    // The volunteer uses the device location; the address is filled in by reverse lookup.
+    await volunteer.getByRole('button', { name: 'My location' }).click();
+    await expect(volunteer.locator('#loc-address')).toHaveValue('Vaishali Nagar, Jaipur, Rajasthan 302021, India');
+    await expect(volunteer.getByTestId('loc-pinned')).toBeVisible();
     await volunteer.getByRole('button', { name: 'Save profile' }).click();
     await expect(volunteer.getByText('Profile saved')).toBeVisible();
 
