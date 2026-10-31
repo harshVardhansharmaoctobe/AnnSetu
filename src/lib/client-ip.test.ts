@@ -6,6 +6,17 @@ const req = (headers: Record<string, string>) => new Request('http://localhost/a
 describe('clientIp', () => {
   afterEach(() => {
     delete process.env.TRUSTED_PROXY_HOPS;
+    delete process.env.CLIENT_IP_HEADER;
+  });
+
+  it('uses the platform header when configured (Netlify), and only then', () => {
+    const headers = { 'x-nf-client-connection-ip': '203.0.113.50', 'x-forwarded-for': '6.6.6.6, 203.0.113.50, 100.64.0.1' };
+    // Not configured: the header is ignored (a client could send it on other hosts).
+    expect(clientIp(req({ 'x-nf-client-connection-ip': '6.6.6.6' }))).toBe('unknown');
+    process.env.CLIENT_IP_HEADER = 'x-nf-client-connection-ip';
+    expect(clientIp(req(headers))).toBe('203.0.113.50');
+    // Configured but missing: falls back to the trusted X-Forwarded-For logic.
+    expect(clientIp(req({ 'x-forwarded-for': '6.6.6.6, 198.51.100.4' }))).toBe('198.51.100.4');
   });
 
   it('ignores a client-supplied X-Forwarded-For prefix (one trusted proxy by default)', () => {

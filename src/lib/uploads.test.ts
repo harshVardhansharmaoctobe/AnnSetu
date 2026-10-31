@@ -1,6 +1,6 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { ApiError } from './api';
-import { detectImageType, diskStorage, STORED_NAME_PATTERN, validateImage } from './uploads';
+import { databaseStorage, detectImageType, diskStorage, maxUploadBytes, STORED_NAME_PATTERN, uploadStorage, validateImage } from './uploads';
 
 const PNG = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]);
 const JPEG = Uint8Array.from([0xff, 0xd8, 0xff, 0xe0, 0, 0x10]);
@@ -66,5 +66,32 @@ describe('stored file names', () => {
   it('refuses to read traversal paths from storage', async () => {
     expect(await diskStorage.read('../package.json')).toBeNull();
     expect(await diskStorage.read('..\\package.json')).toBeNull();
+  });
+});
+
+describe('serverless defaults', () => {
+  const saved = { ...process.env };
+  afterEach(() => {
+    for (const k of ['VERCEL', 'NETLIFY', 'AWS_LAMBDA_FUNCTION_NAME', 'UPLOAD_STORAGE', 'MAX_FILE_SIZE_MB']) {
+      if (saved[k] === undefined) delete process.env[k];
+      else process.env[k] = saved[k];
+    }
+  });
+
+  it('uses database storage and a 4 MB limit on Netlify functions (AWS Lambda) and Vercel', () => {
+    for (const [k, v] of [['NETLIFY', 'true'], ['AWS_LAMBDA_FUNCTION_NAME', '___netlify-server-handler'], ['VERCEL', '1']]) {
+      for (const x of ['VERCEL', 'NETLIFY', 'AWS_LAMBDA_FUNCTION_NAME']) delete process.env[x];
+      process.env[k] = v;
+      expect(uploadStorage()).toBe(databaseStorage);
+      expect(maxUploadBytes()).toBe(4 * 1024 * 1024);
+    }
+  });
+
+  it('keeps disk storage and 5 MB locally, and honours explicit settings', () => {
+    for (const x of ['VERCEL', 'NETLIFY', 'AWS_LAMBDA_FUNCTION_NAME', 'UPLOAD_STORAGE', 'MAX_FILE_SIZE_MB']) delete process.env[x];
+    expect(uploadStorage()).toBe(diskStorage);
+    expect(maxUploadBytes()).toBe(5 * 1024 * 1024);
+    process.env.UPLOAD_STORAGE = 'database';
+    expect(uploadStorage()).toBe(databaseStorage);
   });
 });

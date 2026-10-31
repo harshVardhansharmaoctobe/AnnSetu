@@ -11,6 +11,9 @@
 generator client {
   provider        = "prisma-client-js"
   previewFeatures = ["postgresqlExtensions"]
+  // "native" for the machine that builds; "rhel-openssl-3.0.x" for serverless functions on AWS Lambda
+  // (Netlify functions run on Amazon Linux 2023 while Netlify builds on Ubuntu).
+  binaryTargets   = ["native", "rhel-openssl-3.0.x"]
 }
 
 // DATABASE_URL: runtime connection (on Neon, the pooled "-pooler" URL).

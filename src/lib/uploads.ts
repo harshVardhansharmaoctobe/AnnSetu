@@ -24,10 +24,19 @@ const ALLOWED_CLIENT_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
 const ALLOWED_CLIENT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 export const STORED_NAME_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|png|webp)$/;
 
+/**
+ * True on serverless platforms, whose filesystem is read-only/temporary and whose request bodies are
+ * small: Vercel (VERCEL), Netlify (NETLIFY at build; functions run on AWS Lambda) and Lambda itself.
+ */
+export function isServerless() {
+  return Boolean(process.env.VERCEL || process.env.NETLIFY || process.env.AWS_LAMBDA_FUNCTION_NAME);
+}
+
 export function maxUploadBytes() {
   const mb = Number.parseFloat(process.env.MAX_FILE_SIZE_MB ?? '');
-  // Vercel functions reject request bodies over 4.5 MB, so the default there is 4 MB.
-  const fallback = process.env.VERCEL ? 4 : 5;
+  // Serverless request bodies are capped (Vercel 4.5 MB; Netlify 6 MB after base64 encoding ≈ 4.5 MB of
+  // file), so the default there is 4 MB.
+  const fallback = isServerless() ? 4 : 5;
   return (Number.isFinite(mb) && mb > 0 ? Math.min(mb, 20) : fallback) * 1024 * 1024;
 }
 
@@ -98,7 +107,7 @@ export const diskStorage: UploadStorage = {
 };
 
 /**
- * Image bytes in PostgreSQL (StoredFile). Used on Vercel, whose filesystem is read-only and temporary,
+ * Image bytes in PostgreSQL (StoredFile). Used on serverless hosts, whose filesystem is read-only and temporary,
  * and wherever UPLOAD_STORAGE=database. Images stay behind the signed-in /api/uploads route as before.
  */
 export const databaseStorage: UploadStorage = {
@@ -112,9 +121,9 @@ export const databaseStorage: UploadStorage = {
   },
 };
 
-/** UPLOAD_STORAGE=disk|database; when unset: database on Vercel, disk everywhere else. */
+/** UPLOAD_STORAGE=disk|database; when unset: database on serverless platforms, disk everywhere else. */
 export function uploadStorage(): UploadStorage {
-  const mode = process.env.UPLOAD_STORAGE?.trim().toLowerCase() || (process.env.VERCEL ? 'database' : 'disk');
+  const mode = process.env.UPLOAD_STORAGE?.trim().toLowerCase() || (isServerless() ? 'database' : 'disk');
   return mode === 'database' ? databaseStorage : diskStorage;
 }
 

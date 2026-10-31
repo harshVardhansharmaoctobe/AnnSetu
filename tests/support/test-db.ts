@@ -16,6 +16,12 @@ export function testDatabaseUrl(): string {
   const dev = process.env.DATABASE_URL;
   if (!dev) throw new Error('DATABASE_URL is not set (.env) – cannot derive the test database URL');
   const url = new URL(dev);
+  // A derived test database must be on this machine: if DATABASE_URL ever points at a hosted database
+  // (e.g. Neon), tests must not create and empty "<name>_test" there. Set TEST_DATABASE_URL explicitly
+  // to use a remote test database on purpose.
+  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(url.hostname)) {
+    throw new Error(`Refusing to derive a test database on remote host "${url.hostname}" – set TEST_DATABASE_URL explicitly`);
+  }
   url.pathname = `${url.pathname.replace(/^\//, '')}_test`.replace(/^/, '/');
   return url.toString();
 }

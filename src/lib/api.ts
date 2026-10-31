@@ -105,8 +105,16 @@ export function listResponse<T>(items: T[], total: number, page: number, pageSiz
  * request from. With TRUSTED_PROXY_HOPS proxies in front of the app (default 1: Vercel, Render), the
  * real client address is that many entries from the right. TRUSTED_PROXY_HOPS=0 means the app is
  * reached directly, so forwarding headers are ignored.
+ *
+ * CLIENT_IP_HEADER names a header that the hosting platform itself sets to the client address and
+ * clients cannot override – on Netlify "x-nf-client-connection-ip". Set it only for such a platform.
  */
 export function clientIp(request: Request): string {
+  const platformHeader = process.env.CLIENT_IP_HEADER?.trim().toLowerCase();
+  if (platformHeader) {
+    const value = request.headers.get(platformHeader)?.split(',')[0]?.trim();
+    if (value) return value;
+  }
   const parsed = Number.parseInt(process.env.TRUSTED_PROXY_HOPS ?? '', 10);
   const hops = Number.isFinite(parsed) && parsed >= 0 ? Math.min(parsed, 10) : 1;
   if (hops === 0) return 'unknown';
